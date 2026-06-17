@@ -3624,7 +3624,9 @@ function GFP_DATALAKE_appendWorkRowAS_16_1_12_(work, row) {
 function GFP_DATALAKE_sortWorkAS_16_1_12_(sh) {
   if (!sh) return { sorted: false, reason: "sheet ausente" };
 
-  GFP_DATALAKE_ensureWorkAS_16_1_12_(sh);
+  if (typeof GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13 === "function") {
+    return GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13();
+  }
 
   const lastRow = sh.getLastRow();
 
@@ -3632,11 +3634,7 @@ function GFP_DATALAKE_sortWorkAS_16_1_12_(sh) {
     return { sorted: false, reason: "poucas linhas" };
   }
 
-  if (typeof GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3 === "function") {
-    return GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3();
-  }
-
-  sh.getRange(2, 1, lastRow - 1, GFP_DATALAKE_WORK_FULL_COLS_16_1_12)
+  sh.getRange(2, 1, lastRow - 1, 19)
     .sort([
       { column: 5, ascending: true },
       { column: 1, ascending: false }
@@ -3645,9 +3643,10 @@ function GFP_DATALAKE_sortWorkAS_16_1_12_(sh) {
   return {
     sorted: true,
     rows: lastRow - 1,
-    mode: "fallback_A:S"
+    mode: "fallback_A:S_16_1_12_wrapper"
   };
 }
+
 
 
 /**
@@ -4535,4 +4534,436 @@ function GFP_REPARO_META_ESCAPE_JS_16_1_12_2_(value) {
     .replace(/'/g, "\\'")
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "");
+}
+
+/**
+ * =============================================================================
+ * GFP 16.1.13 — CATEGORIAS LEGADAS + ORDENAÇÃO A:S DEFENSIVA
+ * =============================================================================
+ */
+
+const GFP_PATCH_16_1_13 = "16.1.13";
+
+function GFP_CATEGORIAS_MIGRATION_MAP_16_1_13_() {
+  return {
+    "01.05 — Receitas — Maria Brasileira — Reembolsos":
+      "99.12 — Transitórias — Reembolsos — FERMONT",
+
+    "02.17 — Despesas — Maria Brasileira — Maria Brasileira":
+      "99.10 — Transitórias — Despesas Reembolsáveis — FERMONT",
+
+    "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café":
+      "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições",
+
+    "02.05 — Despesas — Lazer — Restaurantes / Bar / Balada":
+      "02.05 — Despesas — Lazer — Bar / Balada / Festas",
+
+    "02.05 — Despesas — Lazer — Confraternizações / Festas":
+      "02.05 — Despesas — Lazer — Restaurantes / Confraternizações",
+
+    "02.07 — Despesas — Educação — Cursos / Livros":
+      "02.07 — Despesas — Educação — Cursos / Livros / Papelaria"
+  };
+}
+
+/**
+ * Simula ou aplica a migração de categorias legadas.
+ *
+ * dryRun=true  -> só informa o que seria alterado.
+ * dryRun=false -> aplica.
+ */
+function GFP_MIGRAR_CATEGORIAS_LEGADAS_16_1_13(dryRun) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const map = GFP_CATEGORIAS_MIGRATION_MAP_16_1_13_();
+
+  const out = {
+    ok: true,
+    patch: GFP_PATCH_16_1_13,
+    dryRun: dryRun !== false,
+    sheets: {},
+    totalCellsChanged: 0,
+    totalRowsTouched: 0,
+    errors: []
+  };
+
+  ["DB_TRANSACOES", "DB_TRANSACOES_HIST"].forEach(function(sheetName) {
+    try {
+      const sh = ss.getSheetByName(sheetName);
+
+      if (!sh) {
+        out.sheets[sheetName] = { skipped: true, reason: "aba não encontrada" };
+        return;
+      }
+
+      const result = GFP_MIGRAR_CATEGORIAS_LEGADAS_SHEET_16_1_13_(sh, map, out.dryRun);
+
+      out.sheets[sheetName] = result;
+      out.totalCellsChanged += result.cellsChanged || 0;
+      out.totalRowsTouched += result.rowsTouched || 0;
+
+    } catch (e) {
+      out.ok = false;
+      out.errors.push({ sheet: sheetName, error: e.message });
+    }
+  });
+
+  GFP_LOG_16_1_13_(
+    out.dryRun ? "Simulação de migração de categorias concluída." : "Migração de categorias aplicada.",
+    "Categorias",
+    out.ok ? "OK" : "WARN",
+    "Células alteradas: " + out.totalCellsChanged + " | Linhas tocadas: " + out.totalRowsTouched
+  );
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    (out.dryRun ? "Simulação" : "Migração") +
+      " concluída: " +
+      out.totalCellsChanged +
+      " célula(s), " +
+      out.totalRowsTouched +
+      " linha(s).",
+    "GFP 16.1.13",
+    8
+  );
+
+  return out;
+}
+
+function GFP_MIGRAR_CATEGORIAS_LEGADAS_SHEET_16_1_13_(sh, map, dryRun) {
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+
+  const result = {
+    sheet: sh.getName(),
+    rows: Math.max(0, lastRow - 1),
+    cols: lastCol,
+    cellsChanged: 0,
+    rowsTouched: 0,
+    examples: []
+  };
+
+  if (lastRow < 2 || lastCol < 1) return result;
+
+  const maxCol = Math.min(
+    Math.max(lastCol, 19),
+    sh.getName() === "DB_TRANSACOES_HIST" ? 20 : 19
+  );
+
+  const range = sh.getRange(2, 1, lastRow - 1, maxCol);
+  const values = range.getValues();
+  const rowsTouched = {};
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      const original = values[r][c];
+      if (original === null || original === undefined || original === "") continue;
+
+      let current = String(original);
+      let changed = current;
+
+      Object.keys(map).forEach(function(oldCat) {
+        const newCat = map[oldCat];
+        if (changed.indexOf(oldCat) >= 0) {
+          changed = changed.split(oldCat).join(newCat);
+        }
+      });
+
+      if (changed !== current) {
+        values[r][c] = changed;
+        result.cellsChanged++;
+        rowsTouched[r + 2] = true;
+
+        if (result.examples.length < 12) {
+          result.examples.push({
+            row: r + 2,
+            col: c + 1,
+            from: current.substring(0, 180),
+            to: changed.substring(0, 180)
+          });
+        }
+      }
+    }
+  }
+
+  result.rowsTouched = Object.keys(rowsTouched).length;
+
+  if (!dryRun && result.cellsChanged > 0) {
+    range.setValues(values);
+  }
+
+  return result;
+}
+
+/**
+ * Audita categorias fora da CFG_Categorias.
+ * Não altera dados.
+ */
+function GFP_AUDITAR_CATEGORIAS_INVALIDAS_16_1_13() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const valid = GFP_CATEGORIAS_OFICIAIS_SET_16_1_13_();
+
+  const out = {
+    ok: true,
+    patch: GFP_PATCH_16_1_13,
+    sheets: {},
+    totalInvalid: 0,
+    invalids: []
+  };
+
+  ["DB_TRANSACOES", "DB_TRANSACOES_HIST"].forEach(function(sheetName) {
+    const sh = ss.getSheetByName(sheetName);
+
+    if (!sh) {
+      out.sheets[sheetName] = { skipped: true };
+      return;
+    }
+
+    const lastRow = sh.getLastRow();
+
+    if (lastRow < 2) {
+      out.sheets[sheetName] = { scanned: 0, invalid: 0 };
+      return;
+    }
+
+    const vals = sh.getRange(2, 6, lastRow - 1, 1).getValues();
+    const invalid = [];
+
+    vals.forEach(function(row, idx) {
+      const cat = String(row[0] || "").trim();
+      if (!cat) return;
+      if (valid[cat]) return;
+
+      invalid.push({
+        sheet: sheetName,
+        row: idx + 2,
+        category: cat
+      });
+    });
+
+    out.sheets[sheetName] = {
+      scanned: vals.length,
+      invalid: invalid.length
+    };
+
+    out.totalInvalid += invalid.length;
+    out.invalids = out.invalids.concat(invalid.slice(0, 100));
+  });
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    out.totalInvalid
+      ? "Categorias inválidas encontradas: " + out.totalInvalid + ". Veja retorno/log."
+      : "Categorias OK: nenhuma categoria inválida encontrada.",
+    "GFP 16.1.13",
+    8
+  );
+
+  GFP_LOG_16_1_13_(
+    out.totalInvalid
+      ? "Categorias inválidas encontradas."
+      : "Auditoria de categorias concluída sem inválidas.",
+    "Categorias",
+    out.totalInvalid ? "WARN" : "OK",
+    "Total inválidas: " + out.totalInvalid
+  );
+
+  return out;
+}
+
+function GFP_CATEGORIAS_OFICIAIS_SET_16_1_13_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("CFG_Categorias");
+  if (!sh) throw new Error("CFG_Categorias não encontrada.");
+
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return {};
+
+  const values = sh.getRange(2, 6, lastRow - 1, 1).getValues();
+  const set = {};
+
+  values.forEach(function(row) {
+    const cat = String(row[0] || "").trim();
+    if (cat) set[cat] = true;
+  });
+
+  return set;
+}
+
+/**
+ * Ordenação defensiva da DB_TRANSACOES.
+ *
+ * Remove temporariamente a validação da coluna F para impedir que categoria
+ * inválida derrube a ordenação; depois reaplica a validação.
+ */
+function GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("DB_TRANSACOES");
+  if (!sh) throw new Error("DB_TRANSACOES não encontrada.");
+
+  const lastRow = sh.getLastRow();
+  if (lastRow < 3) return { ok: true, sorted: false, reason: "poucas linhas" };
+
+  const out = {
+    ok: true,
+    patch: GFP_PATCH_16_1_13,
+    rows: lastRow - 1,
+    migration: null,
+    auditBefore: null,
+    auditAfter: null,
+    sort: null,
+    errors: []
+  };
+
+  try {
+    out.migration = GFP_MIGRAR_CATEGORIAS_LEGADAS_16_1_13(false);
+  } catch (eMig) {
+    out.errors.push("migração: " + eMig.message);
+  }
+
+  try {
+    out.auditBefore = GFP_AUDITAR_CATEGORIAS_INVALIDAS_16_1_13();
+  } catch (eAud1) {
+    out.errors.push("auditoria antes: " + eAud1.message);
+  }
+
+  try {
+    if (typeof GFP_DATALAKE_ensureWorkAS_16_1_12_ === "function") {
+      GFP_DATALAKE_ensureWorkAS_16_1_12_(sh);
+    }
+  } catch (eAS) {
+    out.errors.push("ensure A:S: " + eAS.message);
+  }
+
+  let categoryRule = null;
+  try {
+    categoryRule = sh.getRange(2, 6).getDataValidation();
+  } catch (eRule) {}
+
+  try {
+    sh.getRange(2, 6, lastRow - 1, 1).clearDataValidations();
+  } catch (eClear) {
+    out.errors.push("clear validação F: " + eClear.message);
+  }
+
+  try {
+    if (typeof GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3 === "function") {
+      out.sort = GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3();
+    } else {
+      sh.getRange(2, 1, lastRow - 1, 19)
+        .sort([
+          { column: 5, ascending: true },
+          { column: 1, ascending: false }
+        ]);
+
+      out.sort = { sorted: true, mode: "fallback_A:S_16_1_13", rows: lastRow - 1 };
+    }
+  } catch (eSort) {
+    out.ok = false;
+    out.errors.push("sort: " + eSort.message);
+
+    try {
+      sh.getRange(2, 1, lastRow - 1, 19)
+        .sort([
+          { column: 5, ascending: true },
+          { column: 1, ascending: false }
+        ]);
+
+      out.sortFallback = {
+        sorted: true,
+        mode: "fallback_after_error_A:S_16_1_13",
+        rows: lastRow - 1
+      };
+      out.ok = true;
+    } catch (eFallback) {
+      out.ok = false;
+      out.errors.push("fallback sort: " + eFallback.message);
+    }
+  } finally {
+    try {
+      const ruleToApply = categoryRule || GFP_CATEGORIA_VALIDATION_RULE_16_1_13_();
+      if (ruleToApply) {
+        sh.getRange(2, 6, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(ruleToApply);
+      }
+    } catch (eReapply) {
+      out.errors.push("reaplicar validação F: " + eReapply.message);
+    }
+  }
+
+  try {
+    out.auditAfter = GFP_AUDITAR_CATEGORIAS_INVALIDAS_16_1_13();
+  } catch (eAud2) {
+    out.errors.push("auditoria depois: " + eAud2.message);
+  }
+
+  try {
+    if (typeof GFP_AUDITAR_ALINHAMENTO_METADADOS_DB_16_1_12 === "function") {
+      out.auditAS = GFP_AUDITAR_ALINHAMENTO_METADADOS_DB_16_1_12();
+    }
+  } catch (eMeta) {
+    out.errors.push("auditoria A:S: " + eMeta.message);
+  }
+
+  GFP_LOG_16_1_13_(
+    out.ok ? "Ordenação defensiva A:S concluída." : "Ordenação defensiva A:S com erro.",
+    "Ordenação",
+    out.ok ? "OK" : "WARN",
+    "Erros: " + out.errors.length
+  );
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    out.ok ? "Ordenação defensiva A:S concluída." : "Ordenação defensiva A:S concluída com alertas.",
+    "GFP 16.1.13",
+    8
+  );
+
+  return out;
+}
+
+function GFP_CATEGORIA_VALIDATION_RULE_16_1_13_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const catSheet = ss.getSheetByName("CFG_Categorias");
+  if (!catSheet) return null;
+
+  return SpreadsheetApp.newDataValidation()
+    .requireValueInRange(catSheet.getRange("F2:F"))
+    .setAllowInvalid(false)
+    .setHelpText("Por favor, selecione uma categoria válida da lista.")
+    .build();
+}
+
+function GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_(value) {
+  const map = GFP_CATEGORIAS_MIGRATION_MAP_16_1_13_();
+  let out = String(value == null ? "" : value);
+
+  Object.keys(map).forEach(function(oldCat) {
+    out = out.split(oldCat).join(map[oldCat]);
+  });
+
+  return out;
+}
+
+function GFP_LOG_16_1_13_(message, area, type, obs) {
+  try {
+    if (typeof Logger === "function") {
+      Logger.log(message, area || "GFP", null, type || "INFO");
+      return;
+    }
+  } catch (e) {}
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sh = ss.getSheetByName("SYS_LOGS");
+    if (!sh) return;
+
+    sh.insertRowBefore(2);
+    sh.getRange(2, 1, 1, 5).setValues([[
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss"),
+      type || "INFO",
+      area || "GFP",
+      message || "",
+      obs || ""
+    ]]);
+  } catch (e2) {}
+}
+
+function GFP_APLICAR_MIGRACAO_CATEGORIAS_LEGADAS_16_1_13() {
+  return GFP_MIGRAR_CATEGORIAS_LEGADAS_16_1_13(false);
 }

@@ -44,7 +44,7 @@ function GFP_DRE_VISAO_RECONSTRUIR_16_1_5() {
   GFP_DRE_VISAO_LOG_16_1_5_(
     result.ok ? "OK" : "WARN",
     result.ok
-      ? "DRE atualizada. A visão de parcelamentos agora fica no Dashboard 2.0."
+      ? "DRE atualizada."
       : "DRE atualizada com alertas: " + result.errors.join(" | ")
   );
 
