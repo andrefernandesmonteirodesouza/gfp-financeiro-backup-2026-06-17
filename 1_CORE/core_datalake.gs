@@ -457,7 +457,7 @@ function GFP_DATALAKE_archiveRowsFromWork_15_2_(work, selectedRows, options) {
 
   const result = {
     ok: true,
-    version: "15.2.8",
+    version: "15.2.8+16.1.18.8-archive-fast",
     batchId: "ARCH-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss"),
     source: options.source || "ARQUIVAR_LINHAS_OK",
     scanned: 0,
@@ -502,13 +502,28 @@ function GFP_DATALAKE_archiveRowsFromWork_15_2_(work, selectedRows, options) {
   const archivedAt = new Date().toISOString();
   const archivedBy = Session.getActiveUser().getEmail() || "";
 
+  // GFP 16.1.18.8 — leitura em lote.
+  // Antes fazia getRange/getValues/getNotes linha por linha, deixando o comando
+  // "Arquivar Linhas OK" extremamente lento com bases maiores.
+  const workReadRange = work.getRange(2, 1, lastRow - 1, GFP_DATALAKE_BASE_COLS_15_2);
+  const workValues = workReadRange.getValues();
+  const workNotesMatrix = workReadRange.getNotes();
+
   rowsToEvaluate.forEach(function(rowNumber) {
     result.scanned++;
 
     try {
-      const rowRange = work.getRange(rowNumber, 1, 1, GFP_DATALAKE_BASE_COLS_15_2);
-      const row = rowRange.getValues()[0];
-      const rowNotes = rowRange.getNotes()[0];
+      const row = workValues[rowNumber - 2];
+      const rowNotes = workNotesMatrix[rowNumber - 2] || GFP_DATALAKE_blankNotes_15_2_4_(GFP_DATALAKE_BASE_COLS_15_2);
+
+      if (!row) {
+        result.skipped++;
+        result.errors.push({
+          rowNumber: rowNumber,
+          error: "Linha não encontrada no snapshot de arquivamento."
+        });
+        return;
+      }
 
       const status = GFP_DATALAKE_norm_15_2_(row[8]);
 
@@ -652,13 +667,9 @@ function GFP_DATALAKE_archiveRowsFromWork_15_2_(work, selectedRows, options) {
       .setValues(appendRows.map(function() { return ["ARQUIVADO"]; }));
   }
 
-  // Remove da mesa de trabalho de baixo para cima.
-  deleteRows
-    .filter(function(v, i, arr) { return arr.indexOf(v) === i; })
-    .sort(function(a, b) { return b - a; })
-    .forEach(function(rowNumber) {
-      work.deleteRow(rowNumber);
-    });
+  // Remove da mesa de trabalho em blocos contíguos, de baixo para cima.
+  // Antes usava deleteRow uma linha por vez, o que ficava muito lento.
+  GFP_DATALAKE_deleteRowsGrouped_16_1_18_8_(work, deleteRows);
 
   GFP_DATALAKE_formatSheets_15_2_(work, hist);
   GFP_DATALAKE_protectHistSheet_15_2_(hist);
@@ -686,6 +697,41 @@ function GFP_DATALAKE_archiveRowsFromWork_15_2_(work, selectedRows, options) {
  * Uso direto:
  * GFP_DESARQUIVAR_HISTORICO_POR_ID_15_2("ID_OU_HASH_AQUI")
  */
+
+function GFP_DATALAKE_deleteRowsGrouped_16_1_18_8_(sheet, rows) {
+  if (!sheet || !rows || !rows.length) return;
+
+  const unique = rows
+    .map(Number)
+    .filter(function(n) { return n && n >= 2; })
+    .filter(function(v, i, arr) { return arr.indexOf(v) === i; })
+    .sort(function(a, b) { return b - a; });
+
+  if (!unique.length) return;
+
+  let high = unique[0];
+  let low = unique[0];
+
+  function flushBlock_() {
+    if (!high || !low) return;
+    sheet.deleteRows(low, high - low + 1);
+  }
+
+  for (let i = 1; i < unique.length; i++) {
+    const row = unique[i];
+
+    if (row === low - 1) {
+      low = row;
+    } else {
+      flushBlock_();
+      high = row;
+      low = row;
+    }
+  }
+
+  flushBlock_();
+}
+
 function GFP_DESARQUIVAR_HISTORICO_POR_ID_15_2(idOrHash) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const work = ss.getSheetByName(GFP_DATALAKE_WORK_SHEET_15_2) || ss.insertSheet(GFP_DATALAKE_WORK_SHEET_15_2);
@@ -1291,13 +1337,23 @@ function GFP_DATALAKE_protectHistSheet_15_2_(hist) {
   try {
     const protections = hist.getProtections(SpreadsheetApp.ProtectionType.SHEET);
 
-    protections.forEach(function(p) {
+    const existing = protections.filter(function(p) {
       try {
-        if (p.canEdit() && String(p.getDescription() || "").indexOf("GFP_HIST_PROTEGIDO") >= 0) {
-          p.remove();
-        }
-      } catch (e) {}
+        return String(p.getDescription() || "").indexOf("GFP_HIST_PROTEGIDO") >= 0;
+      } catch (e) {
+        return false;
+      }
     });
+
+    if (existing.length) {
+      try { existing[0].setWarningOnly(true); } catch (eWarnExisting) {}
+      try { hist.setTabColor("#1d4ed8"); } catch (eColorExisting) {}
+      return {
+        ok: true,
+        mode: "WARNING_ONLY_FULL_SHEET_REUSED",
+        description: String(existing[0].getDescription() || "GFP_HIST_PROTEGIDO")
+      };
+    }
 
     const protection = hist.protect();
     protection.setDescription("GFP_HIST_PROTEGIDO_WARNING_15_2_4");

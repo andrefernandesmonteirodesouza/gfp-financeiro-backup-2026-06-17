@@ -15,8 +15,9 @@
  *   para não deslocar linhas enquanto outras decisões ainda são processadas.
  */
 
-const GFP_ESTORNOS_VERSION_16_1_11 = "16.1.11-ESTAVEL-SEGURO";
+const GFP_ESTORNOS_VERSION_16_1_11 = "16.1.18.9-ESTORNOS-FAST-NEUTRA-CACHE";
 const GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11 = "99.14 — Transitorias — Ajustes de Cartao — Estornos / Cancelamentos";
+var GFP_ESTORNOS_CATEGORIA_CACHE_16_1_18_9_ = {};
 const GFP_ESTORNOS_DB_16_1_17 = "DB_TRANSACOES";
 const GFP_ESTORNOS_HIST_16_1_17 = "DB_TRANSACOES_HIST";
 const GFP_ESTORNOS_TOLERANCIA_CENTAVOS_16_1_17 = 5;
@@ -120,7 +121,7 @@ function GFP_ESTORNOS_ANALISAR_SELECIONADOS_16_1_17() {
     const tipo = GFP_ESTORNOS_NORM_16_1_17_(item.tipo);
     const cat = String(item.category || "");
 
-    if (cat === GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11) return false;
+    if (GFP_ESTORNOS_IS_CATEGORIA_NEUTRA_16_1_18_8_(cat)) return false;
 
     return tipo === "D" || item.value < -0.005;
   });
@@ -227,7 +228,7 @@ function GFP_ESTORNOS_DETECT_GROUPS_16_1_17_(selectedItems, allCandidates) {
         const sameRoot = GFP_ESTORNOS_ROOT_16_1_17_(c.description) === bucket.root;
         const sameAccount = !bucket.accountKey || GFP_ESTORNOS_NORM_16_1_17_(c.account) === bucket.accountKey;
         const valueOk = Math.abs(c.value || 0) <= totalRefund + 0.05;
-        const notNeutral = String(c.category || "") !== GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11;
+        const notNeutral = !GFP_ESTORNOS_IS_CATEGORIA_NEUTRA_16_1_18_8_(c.category);
 
         return sameRoot && sameAccount && valueOk && notNeutral;
       })
@@ -662,7 +663,7 @@ function GFP_ESTORNOS_APLICAR_DECISOES_16_1_17(payload) {
 
       } catch (eItem) {
         out.skipped++;
-        out.errors.push(eItem.message);
+        out.errors.push(GFP_ESTORNOS_ERROR_DETAIL_16_1_18_8_("Decisão " + (decision && decision.action ? decision.action : "") + " | refundRow=" + (decision && decision.refundRow ? decision.refundRow : "") + " | matchKey=" + (decision && decision.matchKey ? decision.matchKey : ""), eItem));
       }
     });
 
@@ -681,7 +682,7 @@ function GFP_ESTORNOS_APLICAR_DECISOES_16_1_17(payload) {
       " | pares: " + out.exact +
       " | parciais: " + out.partial +
       " | sem par: " + out.noPair +
-      (out.errors.length ? " | alertas: " + out.errors.length : "");
+      (out.errors.length ? " | alertas: " + out.errors.length + " | detalhe: " + out.errors.slice(0, 3).join(" || ") : "");
 
     GFP_ESTORNOS_LOG_16_1_11_(msg);
     ss.toast(msg, "GFP Estornos");
@@ -883,6 +884,81 @@ function GFP_ESTORNOS_SCORE_CANDIDATE_16_1_17_(refund, candidate) {
   };
 }
 
+
+/**
+ * GFP 16.1.18.8 — resolve a categoria neutra pelo código na CFG_Categorias.
+ * Evita quebrar quando André renomeia o texto da categoria, mantendo o código 99.14.
+ */
+function GFP_ESTORNOS_CATEGORIA_NEUTRA_16_1_18_8_() {
+  return GFP_ESTORNOS_RESOLVE_CATEGORIA_POR_CODIGO_16_1_18_8_("99.14", GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11);
+}
+
+function GFP_ESTORNOS_RESOLVE_CATEGORIA_POR_CODIGO_16_1_18_8_(codigo, fallback) {
+  codigo = String(codigo || "").trim();
+  fallback = String(fallback || "").trim();
+
+  if (!codigo) return fallback;
+
+  const cacheKey = codigo + "||" + fallback;
+  try {
+    if (GFP_ESTORNOS_CATEGORIA_CACHE_16_1_18_9_ && GFP_ESTORNOS_CATEGORIA_CACHE_16_1_18_9_[cacheKey]) {
+      return GFP_ESTORNOS_CATEGORIA_CACHE_16_1_18_9_[cacheKey];
+    }
+  } catch (eCacheRead) {}
+
+  let resolved = fallback;
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName("CFG_Categorias");
+    if (!sh || sh.getLastRow() < 2) return fallback;
+
+    const values = sh.getDataRange().getValues();
+    const rx = new RegExp("^" + codigo.replace(/\./g, "\\.") + "\\s*[—\\-]\\s*");
+
+    for (let r = 0; r < values.length; r++) {
+      for (let c = 0; c < values[r].length; c++) {
+        const text = String(values[r][c] || "").trim();
+        if (text && rx.test(text)) {
+          resolved = text;
+          break;
+        }
+      }
+      if (resolved !== fallback) break;
+    }
+  } catch (e) {}
+
+  try { GFP_ESTORNOS_CATEGORIA_CACHE_16_1_18_9_[cacheKey] = resolved; } catch (eCacheWrite) {}
+  return resolved;
+}
+
+function GFP_ESTORNOS_IS_CATEGORIA_NEUTRA_16_1_18_8_(categoria) {
+  const cat = String(categoria || "").trim();
+  if (!cat) return false;
+
+  // GFP 16.1.18.9 — esta função roda centenas/milhares de vezes na tela de análise.
+  // NÃO pode ler CFG_Categorias aqui. Basta reconhecer pelo código canônico 99.14.
+  if (/^99\.14(\s|$|[—\-])/.test(cat)) return true;
+
+  return GFP_ESTORNOS_NORM_16_1_17_(cat) === GFP_ESTORNOS_NORM_16_1_17_(GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11);
+}
+
+/**
+ * Coluna STATUS pode ter herdado checkbox TRUE/FALSE de versões antigas.
+ * Para estorno confirmado, a versão final precisa gravar texto "OK" para o arquivamento reconhecer.
+ */
+function GFP_ESTORNOS_SET_STATUS_16_1_18_8_(sh, rowNumber, statusCol, statusValue) {
+  if (!sh || !rowNumber || !statusCol) return;
+  const rg = sh.getRange(rowNumber, statusCol);
+  try { rg.clearDataValidations(); } catch (eClear) {}
+  rg.setValue(statusValue || "OK");
+}
+
+function GFP_ESTORNOS_ERROR_DETAIL_16_1_18_8_(context, err) {
+  const msg = err && err.message ? err.message : String(err || "Erro desconhecido");
+  return String(context || "Estornos/Cancelamentos") + " — " + msg;
+}
+
 /**
  * Aplica o lado do estorno/crédito.
  */
@@ -891,6 +967,7 @@ function GFP_ESTORNOS_APPLY_REFUND_ONLY_16_1_17_(sh, headers, refundItem, option
 
   const rowNumber = refundItem.rowNumber;
   const valueAbs = Math.abs(refundItem.value);
+  const neutralCategory = GFP_ESTORNOS_CATEGORIA_NEUTRA_16_1_18_8_();
   const metaCol = GFP_ESTORNOS_META_COL_16_1_14_(headers);
   const meta = GFP_ESTORNOS_PARSE_JSON_16_1_11_(metaCol ? sh.getRange(rowNumber, metaCol).getValue() : "");
   const nowText = GFP_ESTORNOS_NOW_TEXT_16_1_17_();
@@ -909,7 +986,7 @@ function GFP_ESTORNOS_APPLY_REFUND_ONLY_16_1_17_(sh, headers, refundItem, option
     adjustedValue: valueAbs,
     originalType: refundItem.tipo,
     adjustedType: "C",
-    adjustedCategory: GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11,
+    adjustedCategory: neutralCategory,
     adjustedStatus: options.status || "OK"
   });
 
@@ -921,8 +998,8 @@ function GFP_ESTORNOS_APPLY_REFUND_ONLY_16_1_17_(sh, headers, refundItem, option
 
   sh.getRange(rowNumber, headers.VALOR).setValue(valueAbs);
   sh.getRange(rowNumber, headers.TIPO).setValue("C");
-  sh.getRange(rowNumber, headers.CATEGORIA).setValue(GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11);
-  sh.getRange(rowNumber, headers.STATUS).setValue(options.status || "OK");
+  sh.getRange(rowNumber, headers.CATEGORIA).setValue(neutralCategory);
+  GFP_ESTORNOS_SET_STATUS_16_1_18_8_(sh, rowNumber, headers.STATUS, options.status || "OK");
   sh.getRange(rowNumber, headers.NOTAS).setValue(note);
 
   if (metaCol) {
@@ -940,6 +1017,7 @@ function GFP_ESTORNOS_APPLY_PURCHASE_EXACT_16_1_17_(sh, headers, purchaseItem, o
 
   const rowNumber = purchaseItem.rowNumber;
   const valueAbs = Math.abs(purchaseItem.value);
+  const neutralCategory = GFP_ESTORNOS_CATEGORIA_NEUTRA_16_1_18_8_();
   const metaCol = GFP_ESTORNOS_META_COL_16_1_14_(headers);
   const meta = GFP_ESTORNOS_PARSE_JSON_16_1_11_(metaCol ? sh.getRange(rowNumber, metaCol).getValue() : "");
   const nowText = GFP_ESTORNOS_NOW_TEXT_16_1_17_();
@@ -957,7 +1035,7 @@ function GFP_ESTORNOS_APPLY_PURCHASE_EXACT_16_1_17_(sh, headers, purchaseItem, o
     originalValue: purchaseItem.value,
     adjustedValue: -valueAbs,
     originalCategory: purchaseItem.category,
-    adjustedCategory: GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11,
+    adjustedCategory: neutralCategory,
     linkedRefundRow: options.refund ? options.refund.rowNumber : ""
   });
 
@@ -970,8 +1048,8 @@ function GFP_ESTORNOS_APPLY_PURCHASE_EXACT_16_1_17_(sh, headers, purchaseItem, o
 
   sh.getRange(rowNumber, headers.VALOR).setValue(-valueAbs);
   sh.getRange(rowNumber, headers.TIPO).setValue("D");
-  sh.getRange(rowNumber, headers.CATEGORIA).setValue(GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11);
-  sh.getRange(rowNumber, headers.STATUS).setValue("OK");
+  sh.getRange(rowNumber, headers.CATEGORIA).setValue(neutralCategory);
+  GFP_ESTORNOS_SET_STATUS_16_1_18_8_(sh, rowNumber, headers.STATUS, "OK");
   sh.getRange(rowNumber, headers.NOTAS).setValue(note);
 
   if (metaCol) {
@@ -988,6 +1066,7 @@ function GFP_ESTORNOS_APPLY_PURCHASE_PARTIAL_16_1_17_(sh, headers, purchaseItem,
   options = options || {};
 
   const isHist = sh.getName() === GFP_ESTORNOS_HIST_16_1_17;
+  const neutralCategory = GFP_ESTORNOS_CATEGORIA_NEUTRA_16_1_18_8_();
   const rowNumber = purchaseItem.rowNumber;
   const width = sh.getLastColumn();
   const rowRange = sh.getRange(rowNumber, 1, 1, width);
@@ -1041,7 +1120,7 @@ function GFP_ESTORNOS_APPLY_PURCHASE_PARTIAL_16_1_17_(sh, headers, purchaseItem,
   const canceledRow = row.slice();
   canceledRow[(headers.VALOR || 3) - 1] = -refundAbs;
   canceledRow[(headers.TIPO || 4) - 1] = "D";
-  canceledRow[(headers.CATEGORIA || 6) - 1] = GFP_ESTORNOS_CATEGORIA_PADRAO_16_1_11;
+  canceledRow[(headers.CATEGORIA || 6) - 1] = neutralCategory;
   canceledRow[(headers.STATUS || 9) - 1] = "OK";
   canceledRow[(headers.NOTAS || 10) - 1] = "[" + nowText + "] Parte cancelada da compra original. " +
     "Linha criada automaticamente para compensar estorno parcial. Grupo: " + groupId + ".";
@@ -1917,13 +1996,16 @@ function confirmApply() {
 
   google.script.run
     .withSuccessHandler(function(result) {
-      const msg = result && result.message ? result.message : 'Processo concluído.';
+      const msgBase = result && result.message ? result.message : 'Processo concluído.';
+      const errors = result && Array.isArray(result.errors) ? result.errors : [];
+      const isError = !!(result && result.ok === false);
+      const msg = errors.length ? (msgBase + '\n\nDetalhes dos alertas/erros:\n- ' + errors.join('\n- ')) : msgBase;
 
       showResultOverlay(
-        'Estornos aplicados',
-        'O GFP concluiu o tratamento dos lançamentos selecionados.',
+        isError ? 'Estornos com alerta/erro' : 'Estornos aplicados',
+        isError ? 'A operação não foi concluída integralmente. Veja o detalhe abaixo.' : 'O GFP concluiu o tratamento dos lançamentos selecionados.',
         msg,
-        false
+        isError
       );
     })
     .withFailureHandler(function(err) {

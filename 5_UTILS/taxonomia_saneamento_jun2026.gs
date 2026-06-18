@@ -386,8 +386,8 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PIX RECEBIDO - YAN VITOR FIGUEIRA MONTEIRO",
       categoryCandidates: [
-        "01.01 — Receitas — Salariais — Salário Yan",
-        "Salário Yan"
+        "01.01 — Receitas — Salariais — Salario Yan",
+        "Salario Yan"
       ]
     },
 
@@ -397,15 +397,15 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "ENEL",
       categoryCandidates: [
-        "02.01 — Despesas — Moradia — Energia Elétrica",
-        "Energia Elétrica"
+        "02.01 — Despesas — Moradia — Energia Eletrica",
+        "Energia Eletrica"
       ]
     },
     {
       key: "AMPLA",
       categoryCandidates: [
-        "02.01 — Despesas — Moradia — Energia Elétrica",
-        "Energia Elétrica"
+        "02.01 — Despesas — Moradia — Energia Eletrica",
+        "Energia Eletrica"
       ]
     },
     {
@@ -429,63 +429,63 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "SUPERMERCADO",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "MUNDIAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "GUANABARA",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "ASSAI",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "ASSAÍ",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "ATACADAO",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "ATACADÃO",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "ZONA SUL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
     {
       key: "SUPERMERCADO REAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Supermercado",
+        "02.02 — Despesas — Alimentacao — Supermercado",
         "Supermercado"
       ]
     },
@@ -496,25 +496,25 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "MCDONALD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
+        "02.02 — Despesas — Alimentacao — Lanchonete / Cafe / Refeicoes"
       ]
     },
     {
       key: "MEGAMATTE",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
+        "02.02 — Despesas — Alimentacao — Lanchonete / Cafe / Refeicoes"
       ]
     },
     {
       key: "DELIRIO TROPICAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
+        "02.02 — Despesas — Alimentacao — Lanchonete / Cafe / Refeicoes"
       ]
     },
     {
       key: "DELÍRIO TROPICAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
+        "02.02 — Despesas — Alimentacao — Lanchonete / Cafe / Refeicoes"
       ]
     },
 
@@ -524,7 +524,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PADARIA",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Padaria / Dia a dia"
+        "02.02 — Despesas — Alimentacao — Padaria / Dia a dia"
       ]
     },
 
@@ -534,35 +534,35 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "IFD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Delivery",
+        "02.02 — Despesas — Alimentacao — Delivery",
         "Delivery"
       ]
     },
     {
       key: "IFOOD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Delivery",
+        "02.02 — Despesas — Alimentacao — Delivery",
         "Delivery"
       ]
     },
     {
       key: "RAPPI",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Delivery",
+        "02.02 — Despesas — Alimentacao — Delivery",
         "Delivery"
       ]
     },
     {
       key: "99FOOD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Delivery",
+        "02.02 — Despesas — Alimentacao — Delivery",
         "Delivery"
       ]
     },
         {
       key: "99 FOOD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Delivery",
+        "02.02 — Despesas — Alimentacao — Delivery",
         "Delivery"
       ]
     },
@@ -572,7 +572,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGARIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -580,7 +580,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "FARMACIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -588,7 +588,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "FARMÁCIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -596,7 +596,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGARIA VENANCIO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -604,7 +604,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "VENANCIO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -612,7 +612,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGASIL",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -620,7 +620,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGA RAIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -628,7 +628,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PACHECO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Remédios",
+        "02.04 — Despesas — Saude — Farmacia / Remedios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -636,7 +636,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "POROS PSICOLOGIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Terapia / Psicólogo / Fisioterapia"
+        "02.04 — Despesas — Saude — Terapia / Psicologo / Fisioterapia"
       ]
     },
 
@@ -646,46 +646,46 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "UBER",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Uber / 99 / Táxi"
+        "02.03 — Despesas — Transporte — Uber / 99 / Taxi"
       ]
     },
     {
       key: "99APP",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Uber / 99 / Táxi"
+        "02.03 — Despesas — Transporte — Uber / 99 / Taxi"
       ]
     },
     {
       key: "99 APP",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Uber / 99 / Táxi"
+        "02.03 — Despesas — Transporte — Uber / 99 / Taxi"
       ]
     },
     {
       key: "POSTO",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Combustível",
+        "02.03 — Despesas — Transporte — Combustivel",
         "Combustível"
       ]
     },
     {
       key: "IPIRANGA",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Combustível",
+        "02.03 — Despesas — Transporte — Combustivel",
         "Combustível"
       ]
     },
     {
       key: "SHELL",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Combustível",
+        "02.03 — Despesas — Transporte — Combustivel",
         "Combustível"
       ]
     },
     {
       key: "PETROBRAS",
       categoryCandidates: [
-        "02.03 — Despesas — Transporte — Combustível",
+        "02.03 — Despesas — Transporte — Combustivel",
         "Combustível"
       ]
     },
@@ -703,7 +703,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PET CENTER",
       categoryCandidates: [
-        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
+        "02.10 — Despesas — Pets (Leozinho) — Racao / Petiscos",
         "Pet",
         "Pets"
       ]
@@ -711,7 +711,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PETZ",
       categoryCandidates: [
-        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
+        "02.10 — Despesas — Pets (Leozinho) — Racao / Petiscos",
         "Pet",
         "Pets"
       ]
@@ -719,7 +719,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "COBASI",
       categoryCandidates: [
-        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
+        "02.10 — Despesas — Pets (Leozinho) — Racao / Petiscos",
         "Pet",
         "Pets"
       ]
