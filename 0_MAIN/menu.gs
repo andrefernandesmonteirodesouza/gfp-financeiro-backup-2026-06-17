@@ -23,6 +23,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🧾 Conferir Totais de Fatura', 'conferirTotaisFaturaWrapper')
     .addItem('💾 Fazer backup de segurança', 'fazerBackupSegurancaWrapper')
+    .addItem('🔎 Painel de Auditorias', 'GFP_MENU_PAINEL_AUDITORIAS_16_1_17')
     .addItem('🧰 Central de Ferramentas', 'GFP_MENU_CENTRAL_FERRAMENTAS_16_1_14')
     .addToUi();
 }
@@ -75,6 +76,18 @@ function GFP_MENU_16_1_2_AFTER_ACTION_() {
 // =============================================================================
 
 function importarExtratosWrapper() {
+  const backupFn = GFP_MENU_16_1_2_GET_FN_('GFP_BACKUP_ANTES_ACAO_SENSIVEL_16_1_16_');
+  if (backupFn) {
+    try { backupFn('Importar Extratos'); } catch (e) {
+      SpreadsheetApp.getActive().toast(
+        'Backup antes da importação falhou. Importação bloqueada por segurança.',
+        'GFP 16.1.16',
+        10
+      );
+      throw e;
+    }
+  }
+
   const r = GFP_MENU_16_1_2_CALL_('pipelineExecute', [], 'GFMB');
   GFP_MENU_16_1_2_AFTER_ACTION_();
   return r;
@@ -139,4 +152,8 @@ function GFP_MENU_ESTORNOS_CANCELAMENTOS_16_1_11() {
 
 function GFP_MENU_CENTRAL_FERRAMENTAS_16_1_14() {
   return GFP_CENTRAL_FERRAMENTAS_OPEN_16_1_14();
+}
+
+function GFP_MENU_PAINEL_AUDITORIAS_16_1_17() {
+  return GFP_PAINEL_AUDITORIAS_OPEN_16_1_17();
 }

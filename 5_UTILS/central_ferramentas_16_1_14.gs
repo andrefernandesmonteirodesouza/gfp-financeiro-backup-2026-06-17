@@ -1,19 +1,21 @@
 /**
  * 📂 ARQUIVO: 5_UTILS/central_ferramentas_16_1_14.gs
  * 🧰 MÓDULO: CENTRAL DE FERRAMENTAS SEGURA — CANIVETE SUÍÇO
- * 🔢 VERSÃO: 16.1.14
+ * 🔢 VERSÃO: 16.1.15.1
  *
- * Lista controlada de funções acessórias.
- * Não executa funções arbitrárias.
- * Não lista funções internas perigosas.
+ * PATCH 16.1.15.1:
+ * - Mantém a Central enxuta, sem duplicar o menu principal.
+ * - Mantém lista controlada/whitelist.
+ * - Acrescenta confirmação visual customizada para ações AMARELAS.
+ * - Não usa window.confirm(), window.alert() nem alert nativo feio.
+ * - Não mexe em DB_TRANSACOES, DB_TRANSACOES_HIST, Gemini, importação, DRE ou Dashboard.
  */
 
-
-const GFP_CENTRAL_FERRAMENTAS_PATCH_16_1_14 = "16.1.14";
+const GFP_CENTRAL_FERRAMENTAS_PATCH_16_1_14 = "16.1.15.1";
 
 
 /**
- * Abre a central visual.
+ * Abre a Central visual.
  */
 function GFP_CENTRAL_FERRAMENTAS_OPEN_16_1_14() {
   const tools = GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_()
@@ -25,453 +27,715 @@ function GFP_CENTRAL_FERRAMENTAS_OPEN_16_1_14() {
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e");
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base target="_top">
-        <style>
-          :root {
-            --navy: #0b2d4d;
-            --navy2: #123d63;
-            --bg: #f8fafc;
-            --line: #e2e8f0;
-            --text: #0f172a;
-            --muted: #64748b;
-            --green-bg: #dcfce7;
-            --green: #166534;
-            --yellow-bg: #fef9c3;
-            --yellow: #92400e;
-            --red-bg: #fee2e2;
-            --red: #991b1b;
-            --blue-bg: #e0f2fe;
-            --blue: #075985;
-          }
+  const htmlParts = [];
 
-          body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-          }
+  htmlParts.push('<!DOCTYPE html>');
+  htmlParts.push('<html>');
+  htmlParts.push('<head>');
+  htmlParts.push('<base target="_top">');
+  htmlParts.push('<style>');
+  htmlParts.push(`
+    :root {
+      --navy: #0b2d4d;
+      --navy2: #123d63;
+      --bg: #f8fafc;
+      --line: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --green-bg: #dcfce7;
+      --green: #166534;
+      --yellow-bg: #fef9c3;
+      --yellow: #92400e;
+      --blue-bg: #e0f2fe;
+      --blue: #075985;
+      --red-bg: #fee2e2;
+      --red: #991b1b;
+    }
 
-          .top {
-            background: var(--navy);
-            color: #fff;
-            padding: 18px 22px;
-          }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
 
-          .top h1 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 800;
-          }
+    .top {
+      background: var(--navy);
+      color: #fff;
+      padding: 18px 22px;
+    }
 
-          .top p {
-            margin: 6px 0 0;
-            font-size: 12px;
-            opacity: .9;
-          }
+    .top h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+    }
 
-          .wrap {
-            padding: 18px 22px 22px;
-          }
+    .top p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      opacity: .9;
+    }
 
-          .bar {
-            display: grid;
-            grid-template-columns: 1fr auto auto;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 14px;
-          }
+    .wrap {
+      padding: 18px 22px 22px;
+    }
 
-          input[type="text"] {
-            width: 100%;
-            box-sizing: border-box;
-            border: 1px solid #cbd5e1;
-            border-radius: 10px;
-            padding: 11px 12px;
-            font-size: 13px;
-            outline: none;
-            background: #fff;
-          }
+    .bar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
 
-          select {
-            border: 1px solid #cbd5e1;
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 13px;
-            background: #fff;
-          }
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-size: 13px;
+      outline: none;
+      background: #fff;
+    }
 
-          .backupOpt {
-            display: flex;
-            gap: 7px;
-            align-items: center;
-            background: #fff;
-            border: 1px solid #cbd5e1;
-            border-radius: 10px;
-            padding: 9px 11px;
-            font-size: 12px;
-            color: #334155;
-            white-space: nowrap;
-          }
+    select {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      background: #fff;
+    }
 
-          .legend {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 14px;
-          }
+    .backupOpt {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 9px 11px;
+      font-size: 12px;
+      color: #334155;
+      white-space: nowrap;
+    }
 
-          .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 9px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 700;
-          }
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
 
-          .pill.green { background: var(--green-bg); color: var(--green); }
-          .pill.yellow { background: var(--yellow-bg); color: var(--yellow); }
-          .pill.red { background: var(--red-bg); color: var(--red); }
-          .pill.blue { background: var(--blue-bg); color: var(--blue); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
 
-          .grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-          }
+    .pill.green { background: var(--green-bg); color: var(--green); }
+    .pill.yellow { background: var(--yellow-bg); color: var(--yellow); }
+    .pill.blue { background: var(--blue-bg); color: var(--blue); }
 
-          .card {
-            background: #fff;
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
-          }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
 
-          .cardHead {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 13px 14px 9px;
-            border-bottom: 1px solid #eef2f7;
-          }
+    .card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
 
-          .title {
-            font-weight: 800;
-            font-size: 14px;
-            color: #0f172a;
-            margin-bottom: 4px;
-          }
+    .cardHead {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 13px 14px 9px;
+      border-bottom: 1px solid #eef2f7;
+    }
 
-          .fn {
-            font-family: Consolas, monospace;
-            font-size: 10px;
-            color: #64748b;
-            word-break: break-all;
-          }
+    .title {
+      font-weight: 800;
+      font-size: 14px;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
 
-          .risk {
-            white-space: nowrap;
-            font-size: 10px;
-            font-weight: 800;
-            padding: 4px 8px;
-            border-radius: 999px;
-          }
+    .fn {
+      font-family: Consolas, monospace;
+      font-size: 10px;
+      color: #64748b;
+      word-break: break-all;
+    }
 
-          .risk.GREEN { background: var(--green-bg); color: var(--green); }
-          .risk.YELLOW { background: var(--yellow-bg); color: var(--yellow); }
-          .risk.RED { background: var(--red-bg); color: var(--red); }
+    .risk {
+      white-space: nowrap;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
 
-          .cardBody {
-            padding: 10px 14px 13px;
-          }
+    .risk.GREEN { background: var(--green-bg); color: var(--green); }
+    .risk.YELLOW { background: var(--yellow-bg); color: var(--yellow); }
 
-          .desc {
-            font-size: 12px;
-            color: #334155;
-            line-height: 1.45;
-            min-height: 38px;
-          }
+    .cardBody {
+      padding: 10px 14px 13px;
+    }
 
-          .meta {
-            margin-top: 10px;
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-          }
+    .desc {
+      font-size: 12px;
+      color: #334155;
+      line-height: 1.45;
+      min-height: 42px;
+    }
 
-          .tag {
-            font-size: 10px;
-            font-weight: 700;
-            color: #475569;
-            background: #f1f5f9;
-            padding: 4px 7px;
-            border-radius: 999px;
-          }
+    .meta {
+      margin-top: 10px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
 
-          .actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 12px;
-          }
+    .tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+      background: #f1f5f9;
+      padding: 4px 7px;
+      border-radius: 999px;
+    }
 
-          button {
-            border: 0;
-            border-radius: 9px;
-            padding: 9px 13px;
-            font-weight: 800;
-            cursor: pointer;
-            font-size: 12px;
-          }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
 
-          .btnRun {
-            background: var(--navy);
-            color: #fff;
-          }
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 13px;
+      font-weight: 800;
+      cursor: pointer;
+      font-size: 12px;
+    }
 
-          .btnRun:hover {
-            background: var(--navy2);
-          }
+    .btnRun {
+      background: var(--navy);
+      color: #fff;
+    }
 
-          .btnDisabled {
-            background: #f1f5f9;
-            color: #94a3b8;
-            cursor: not-allowed;
-          }
+    .btnRun:hover {
+      background: var(--navy2);
+    }
 
-          .footer {
-            margin-top: 14px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            font-size: 12px;
-            color: #475569;
-            line-height: 1.45;
-          }
+    .btnSecondary {
+      background: #e0f2fe;
+      color: #0b2d4d;
+    }
 
-          #result {
-            display: none;
-            margin-bottom: 14px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            font-size: 13px;
-            line-height: 1.4;
-          }
+    .btnYellow {
+      background: #f59e0b;
+      color: #111827;
+    }
 
-          #result.ok {
-            display: block;
-            background: #f0fdf4;
-            color: #166534;
-            border: 1px solid #bbf7d0;
-          }
+    .btnDanger {
+      background: #fee2e2;
+      color: #991b1b;
+    }
 
-          #result.warn {
-            display: block;
-            background: #fef2f2;
-            color: #991b1b;
-            border: 1px solid #fecaca;
-          }
+    .footer {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.45;
+    }
 
-          @media (max-width: 900px) {
-            .grid { grid-template-columns: 1fr; }
-            .bar { grid-template-columns: 1fr; }
-          }
-        </style>
-      </head>
+    #result {
+      display: none;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
 
-      <body>
-        <div class="top">
-          <h1>🧰 GFP — Central de Ferramentas</h1>
-          <p>Canivete suíço seguro: auditorias, reparos leves e comandos acessórios aprovados.</p>
-        </div>
+    #result.ok {
+      display: block;
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
 
-        <div class="wrap">
-          <div class="bar">
-            <input id="search" type="text" placeholder="Buscar por nome, função, área ou descrição..." oninput="renderTools()">
+    #result.warn {
+      display: block;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
 
-            <select id="riskFilter" onchange="renderTools()">
-              <option value="">Todos os níveis</option>
-              <option value="GREEN">Verde — diagnóstico</option>
-              <option value="YELLOW">Amarelo — altera algo</option>
-              <option value="RED">Vermelho — bloqueado</option>
-            </select>
+    pre {
+      white-space: pre-wrap;
+      font-size: 11px;
+      margin: 8px 0 0;
+      max-height: 190px;
+      overflow: auto;
+      background: rgba(255,255,255,.65);
+      padding: 8px;
+      border-radius: 8px;
+    }
 
-            <label class="backupOpt">
-              <input id="backupBefore" type="checkbox" checked>
-              Backup antes de ações amarelas
-            </label>
-          </div>
+    .modalOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .46);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
 
-          <div class="legend">
-            <span class="pill green">Verde: diagnóstico / seguro</span>
-            <span class="pill yellow">Amarelo: altera algo / revisar antes</span>
-            <span class="pill red">Vermelho: bloqueado na Central</span>
-            <span class="pill blue">Lista controlada, não automática</span>
-          </div>
+    .modalOverlay.show {
+      display: flex;
+    }
 
-          <div id="result"></div>
-          <div id="tools" class="grid"></div>
+    .confirmBox {
+      width: min(680px, 96vw);
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, .34);
+      border: 1px solid rgba(226, 232, 240, .9);
+    }
 
-          <div class="footer">
-            Esta Central não lista todas as funções do Apps Script. Ela mostra apenas funções aprovadas.
-            Funções sensíveis como reset, importação, Gemini/recalibração pesada e arquivamento global não são executáveis aqui.
-          </div>
-        </div>
+    .confirmTop {
+      background: var(--navy);
+      color: #fff;
+      padding: 16px 18px;
+    }
 
-        <script>
-          const TOOLS = ${toolsJson};
+    .confirmTop h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 800;
+    }
 
-          function riskLabel(risk) {
-            if (risk === 'GREEN') return 'VERDE';
-            if (risk === 'YELLOW') return 'AMARELO';
-            if (risk === 'RED') return 'BLOQUEADO';
-            return risk || '';
-          }
+    .confirmTop p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      opacity: .9;
+    }
 
-          function escapeHtml(v) {
-            return String(v == null ? '' : v)
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#039;');
-          }
+    .confirmBody {
+      padding: 16px 18px;
+    }
 
-          function normalize(v) {
-            return String(v || '').toLowerCase()
-              .normalize('NFD')
-              .replace(/[\\u0300-\\u036f]/g, '');
-          }
+    .confirmTitle {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
 
-          function renderTools() {
-            const box = document.getElementById('tools');
-            const q = normalize(document.getElementById('search').value);
-            const risk = document.getElementById('riskFilter').value;
+    .confirmDesc {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
 
-            const filtered = TOOLS.filter(t => {
-              if (risk && t.risk !== risk) return false;
+    .confirmWarn {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
 
-              const hay = normalize([
-                t.title,
-                t.fn,
-                t.group,
-                t.description,
-                (t.tags || []).join(' ')
-              ].join(' '));
+    .confirmFn {
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      color: #475569;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 9px 10px;
+      word-break: break-all;
+    }
 
-              return !q || hay.includes(q);
-            });
+    .confirmActions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 0 18px 18px;
+    }
 
-            box.innerHTML = filtered.map(t => {
-              const tags = (t.tags || []).map(x => '<span class="tag">' + escapeHtml(x) + '</span>').join('');
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .bar { grid-template-columns: 1fr; }
+    }
+  `);
+  htmlParts.push('</style>');
+  htmlParts.push('</head>');
 
-              const action = t.blocked
-                ? '<button class="btnDisabled" disabled>Bloqueado</button>'
-                : '<button class="btnRun" onclick="runTool(\\'' + escapeHtml(t.id) + '\\')">Executar</button>';
+  htmlParts.push('<body>');
+  htmlParts.push('<div class="top">');
+  htmlParts.push('<h1>🧰 GFP — Central de Ferramentas</h1>');
+  htmlParts.push('<p>Ferramentas acessórias úteis. Sem duplicar o menu principal e sem comandos sensíveis.</p>');
+  htmlParts.push('</div>');
 
-              return ''
-                + '<div class="card">'
-                +   '<div class="cardHead">'
-                +     '<div>'
-                +       '<div class="title">' + escapeHtml(t.title) + '</div>'
-                +       '<div class="fn">' + escapeHtml(t.fn || 'sem função executável') + '</div>'
-                +     '</div>'
-                +     '<span class="risk ' + escapeHtml(t.risk) + '">' + escapeHtml(riskLabel(t.risk)) + '</span>'
-                +   '</div>'
-                +   '<div class="cardBody">'
-                +     '<div class="desc">' + escapeHtml(t.description) + '</div>'
-                +     '<div class="meta">'
-                +       '<span class="tag">' + escapeHtml(t.group || 'Geral') + '</span>'
-                +       tags
-                +     '</div>'
-                +     '<div class="actions">'
-                +       action
-                +     '</div>'
-                +   '</div>'
-                + '</div>';
-            }).join('');
-          }
+  htmlParts.push('<div class="wrap">');
+  htmlParts.push('<div class="bar">');
+  htmlParts.push('<input id="search" type="text" placeholder="Buscar por nome, função, área ou descrição..." oninput="renderTools()">');
+  htmlParts.push('<select id="riskFilter" onchange="renderTools()">');
+  htmlParts.push('<option value="">Todos os níveis</option>');
+  htmlParts.push('<option value="GREEN">Verde — diagnóstico</option>');
+  htmlParts.push('<option value="YELLOW">Amarelo — altera algo</option>');
+  htmlParts.push('</select>');
+  htmlParts.push('<label class="backupOpt"><input id="backupBefore" type="checkbox" checked> Backup antes de ações amarelas</label>');
+  htmlParts.push('</div>');
 
-          function showResult(ok, msg) {
-            const el = document.getElementById('result');
-            el.className = ok ? 'ok' : 'warn';
-            el.innerHTML = msg;
-          }
+  htmlParts.push('<div class="legend">');
+  htmlParts.push('<span class="pill green">Verde: diagnóstico / não altera dados</span>');
+  htmlParts.push('<span class="pill yellow">Amarelo: altera algo / exige atenção</span>');
+  htmlParts.push('<span class="pill blue">Sem duplicar botões do menu principal</span>');
+  htmlParts.push('</div>');
 
-          function runTool(id) {
-            const tool = TOOLS.find(t => t.id === id);
-            if (!tool) {
-              showResult(false, '<strong>Ferramenta não encontrada.</strong>');
-              return;
-            }
+  htmlParts.push('<div id="result"></div>');
+  htmlParts.push('<div id="tools" class="grid"></div>');
 
-            if (tool.blocked) {
-              showResult(false, '<strong>Bloqueado:</strong> esta função não pode ser executada pela Central.');
-              return;
-            }
+  htmlParts.push('<div class="footer">');
+  htmlParts.push('Esta Central é uma lista controlada de ferramentas acessórias. Importar Extratos, Dashboard, Painel, Arquivar Linhas OK, Backup, Histórico, Estornos e Conferir Totais continuam no menu principal.');
+  htmlParts.push('</div>');
+  htmlParts.push('</div>');
 
-            const backupBefore = document.getElementById('backupBefore').checked;
+  htmlParts.push('<div id="confirmOverlay" class="modalOverlay">');
+  htmlParts.push('<div class="confirmBox">');
+  htmlParts.push('<div class="confirmTop">');
+  htmlParts.push('<h2>Confirmar execução</h2>');
+  htmlParts.push('<p>Ação amarela: altera algo na planilha e deve ser executada com atenção.</p>');
+  htmlParts.push('</div>');
+  htmlParts.push('<div class="confirmBody">');
+  htmlParts.push('<div id="confirmTitle" class="confirmTitle"></div>');
+  htmlParts.push('<div id="confirmDesc" class="confirmDesc"></div>');
+  htmlParts.push('<div id="confirmWarn" class="confirmWarn"></div>');
+  htmlParts.push('<div id="confirmFn" class="confirmFn"></div>');
+  htmlParts.push('</div>');
+  htmlParts.push('<div class="confirmActions">');
+  htmlParts.push('<button class="btnSecondary" onclick="closeConfirm()">Cancelar</button>');
+  htmlParts.push('<button id="confirmRunBtn" class="btnYellow" onclick="confirmRun()">Executar ação</button>');
+  htmlParts.push('</div>');
+  htmlParts.push('</div>');
+  htmlParts.push('</div>');
 
-            showResult(true, '<strong>Executando:</strong> ' + escapeHtml(tool.title) + '...');
+  htmlParts.push('<script>');
+  htmlParts.push('const TOOLS = ' + toolsJson + ';');
+  htmlParts.push(`
+    let pendingToolId = null;
 
-            google.script.run
-              .withSuccessHandler(function(res) {
-                const ok = !res || res.ok !== false;
-                const details = res && typeof res === 'object'
-                  ? '<pre style="white-space:pre-wrap;font-size:11px;margin:8px 0 0">' + escapeHtml(JSON.stringify(res, null, 2).slice(0, 2400)) + '</pre>'
-                  : '';
+    function riskLabel(risk) {
+      if (risk === 'GREEN') return 'VERDE';
+      if (risk === 'YELLOW') return 'AMARELO';
+      return risk || '';
+    }
 
-                showResult(
-                  ok,
-                  '<strong>' + (ok ? 'Concluído:' : 'Concluído com alerta:') + '</strong> ' +
-                  escapeHtml(tool.title) +
-                  details
-                );
-              })
-              .withFailureHandler(function(err) {
-                showResult(
-                  false,
-                  '<strong>Erro ao executar:</strong> ' +
-                  escapeHtml(tool.title) +
-                  '<br>' +
-                  escapeHtml(err && err.message ? err.message : err)
-                );
-              })
-              .GFP_CENTRAL_FERRAMENTAS_EXECUTE_16_1_14(id, {
-                backupBefore: backupBefore
-              });
-          }
+    function escapeHtml(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
-          renderTools();
-        </script>
-      </body>
-    </html>
-  `;
+    function normalize(v) {
+      return String(v || '').toLowerCase()
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '');
+    }
+
+    function renderTools() {
+      const box = document.getElementById('tools');
+      const q = normalize(document.getElementById('search').value);
+      const risk = document.getElementById('riskFilter').value;
+
+      const filtered = TOOLS.filter(function(t) {
+        if (risk && t.risk !== risk) return false;
+
+        const hay = normalize([
+          t.title,
+          t.fn,
+          t.group,
+          t.description,
+          (t.tags || []).join(' ')
+        ].join(' '));
+
+        return !q || hay.indexOf(q) >= 0;
+      });
+
+      const cards = filtered.map(function(t) {
+        const tags = (t.tags || []).map(function(x) {
+          return '<span class="tag">' + escapeHtml(x) + '</span>';
+        }).join('');
+
+        return [
+          '<div class="card">',
+            '<div class="cardHead">',
+              '<div>',
+                '<div class="title">' + escapeHtml(t.title) + '</div>',
+                '<div class="fn">' + escapeHtml(t.fn || '') + '</div>',
+              '</div>',
+              '<span class="risk ' + escapeHtml(t.risk) + '">' + escapeHtml(riskLabel(t.risk)) + '</span>',
+            '</div>',
+            '<div class="cardBody">',
+              '<div class="desc">' + escapeHtml(t.description || '') + '</div>',
+              '<div class="meta">',
+                '<span class="tag">' + escapeHtml(t.group || 'Geral') + '</span>',
+                tags,
+              '</div>',
+              '<div class="actions">',
+                '<button class="btnRun" onclick="runTool(\\'' + escapeHtml(t.id) + '\\')">Executar</button>',
+              '</div>',
+            '</div>',
+          '</div>'
+        ].join('');
+      }).join('');
+
+      box.innerHTML = cards || '<div class="footer">Nenhuma ferramenta encontrada com esse filtro.</div>';
+    }
+
+    function showResult(ok, msg) {
+      const el = document.getElementById('result');
+      el.className = ok ? 'ok' : 'warn';
+      el.innerHTML = msg;
+    }
+
+    function humanizeToolResult(tool, res) {
+      const ok = !res || res.ok !== false;
+      const result = res && res.result && typeof res.result === 'object' ? res.result : res;
+      const lines = [];
+
+      lines.push('<strong>' + (ok ? 'Concluído:' : 'Concluído com alerta:') + '</strong> ' + escapeHtml(tool.title));
+
+      if (res && res.backup) {
+        lines.push('✅ Backup de segurança executado antes da ação.');
+      }
+
+      if (!result || typeof result !== 'object') {
+        lines.push('A função foi executada. Não houve retorno estruturado para resumir.');
+        return lines.join('<br>');
+      }
+
+      const id = tool.id || '';
+
+      if (typeof result.totalInvalid !== 'undefined') {
+        lines.push(result.totalInvalid === 0
+          ? '✅ Categorias OK: nenhuma categoria inválida encontrada.'
+          : '⚠️ Categorias inválidas encontradas: ' + escapeHtml(result.totalInvalid));
+      }
+
+      if (typeof result.scanned !== 'undefined' && typeof result.alerts !== 'undefined') {
+        const alertsCount = Array.isArray(result.alerts) ? result.alerts.length : Number(result.alerts || 0);
+        lines.push(alertsCount === 0
+          ? '✅ Metadados/A:S OK: ' + escapeHtml(result.scanned) + ' linha(s) analisada(s), nenhum desalinhamento encontrado.'
+          : '⚠️ Metadados/A:S: ' + escapeHtml(alertsCount) + ' possível(is) desalinhamento(s) em ' + escapeHtml(result.scanned) + ' linha(s).');
+      }
+
+      if (typeof result.totalCellsChanged !== 'undefined' || typeof result.totalRowsTouched !== 'undefined') {
+        const dry = result.dryRun ? 'Simulação concluída.' : 'Migração aplicada.';
+        lines.push('✅ ' + dry + ' Células afetadas: ' + escapeHtml(result.totalCellsChanged || 0) + '; linhas tocadas: ' + escapeHtml(result.totalRowsTouched || 0) + '.');
+      }
+
+      if (id === 'ordenar_as_defensivo' || result.sort || result.sortFallback) {
+        lines.push('✅ Ordenação defensiva A:S executada. A linha inteira A:S foi tratada como unidade.');
+        if (result.auditAfter && typeof result.auditAfter.totalInvalid !== 'undefined') {
+          lines.push(result.auditAfter.totalInvalid === 0
+            ? '✅ Pós-ordenação: nenhuma categoria inválida.'
+            : '⚠️ Pós-ordenação: ' + escapeHtml(result.auditAfter.totalInvalid) + ' categoria(s) inválida(s).');
+        }
+        if (result.auditAS && Array.isArray(result.auditAS.alerts)) {
+          lines.push(result.auditAS.alerts.length === 0
+            ? '✅ Pós-ordenação: nenhum desalinhamento A:S.'
+            : '⚠️ Pós-ordenação: ' + escapeHtml(result.auditAS.alerts.length) + ' desalinhamento(s) A:S.');
+        }
+      }
+
+      if (typeof result.repaired !== 'undefined') {
+        lines.push('✅ Reparo concluído: ' + escapeHtml(result.repaired) + ' linha(s) corrigida(s).');
+      }
+
+      if (typeof result.processed !== 'undefined') {
+        lines.push('✅ Processadas: ' + escapeHtml(result.processed) + ' linha(s).');
+      }
+
+      if (typeof result.trained !== 'undefined') {
+        lines.push('🧠 Aprendizados/treinos registrados: ' + escapeHtml(result.trained) + '.');
+      }
+
+      if (typeof result.feedback !== 'undefined') {
+        lines.push('🧠 Feedbacks de modelo registrados: ' + escapeHtml(result.feedback) + '.');
+      }
+
+      if (result.summary && typeof result.summary === 'object') {
+        const s = result.summary;
+        const bits = [];
+        if (typeof s.ok !== 'undefined') bits.push('OK: ' + s.ok);
+        if (typeof s.warn !== 'undefined') bits.push('avisos: ' + s.warn);
+        if (typeof s.fatal !== 'undefined') bits.push('críticos: ' + s.fatal);
+        if (bits.length) lines.push('📋 Resumo: ' + escapeHtml(bits.join(' | ')) + '.');
+      }
+
+      const errors = [];
+      if (Array.isArray(result.errors)) errors.push.apply(errors, result.errors);
+      if (Array.isArray(res && res.errors)) errors.push.apply(errors, res.errors);
+
+      if (errors.length) {
+        lines.push('⚠️ Alertas/erros registrados: ' + escapeHtml(errors.length) + '.');
+      }
+
+      if (lines.length === 1) {
+        lines.push('Ação finalizada. O retorno técnico não trouxe um resumo padronizado para esta função.');
+      }
+
+      const raw = escapeHtml(JSON.stringify(res, null, 2).slice(0, 3000));
+      lines.push('<details style="margin-top:8px"><summary>Ver detalhes técnicos</summary><pre>' + raw + '</pre></details>');
+
+      return lines.join('<br>');
+    }
+
+    function runTool(id) {
+      const tool = TOOLS.find(function(t) { return t.id === id; });
+
+      if (!tool) {
+        showResult(false, '<strong>Ferramenta não encontrada.</strong>');
+        return;
+      }
+
+      if (tool.risk === 'YELLOW') {
+        openConfirm(tool);
+        return;
+      }
+
+      executeTool(id);
+    }
+
+    function openConfirm(tool) {
+      pendingToolId = tool.id;
+
+      const backupBefore = document.getElementById('backupBefore').checked;
+
+      document.getElementById('confirmTitle').textContent = tool.title;
+      document.getElementById('confirmDesc').textContent = tool.description || '';
+      document.getElementById('confirmFn').textContent = tool.fn || '';
+
+      document.getElementById('confirmWarn').innerHTML = backupBefore
+        ? 'O backup antes de ações amarelas está marcado. A Central tentará criar um backup antes de executar esta ação.'
+        : 'Atenção: o backup antes de ações amarelas está desmarcado. Execute somente se tiver certeza.';
+
+      document.getElementById('confirmRunBtn').textContent = backupBefore
+        ? 'Executar com backup'
+        : 'Executar sem backup';
+
+      document.getElementById('confirmOverlay').className = 'modalOverlay show';
+    }
+
+    function closeConfirm() {
+      pendingToolId = null;
+      document.getElementById('confirmOverlay').className = 'modalOverlay';
+    }
+
+    function confirmRun() {
+      const id = pendingToolId;
+      closeConfirm();
+      executeTool(id);
+    }
+
+    function executeTool(id) {
+      const tool = TOOLS.find(function(t) { return t.id === id; });
+
+      if (!tool) {
+        showResult(false, '<strong>Ferramenta não encontrada.</strong>');
+        return;
+      }
+
+      const backupBefore = document.getElementById('backupBefore').checked;
+
+      showResult(true, '<strong>Executando:</strong> ' + escapeHtml(tool.title) + '...');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          const ok = !res || res.ok !== false;
+          showResult(ok, humanizeToolResult(tool, res));
+        })
+        .withFailureHandler(function(err) {
+          showResult(
+            false,
+            '<strong>Erro ao executar:</strong> ' +
+            escapeHtml(tool.title) +
+            '<br>' +
+            escapeHtml(err && err.message ? err.message : err)
+          );
+        })
+        .GFP_CENTRAL_FERRAMENTAS_EXECUTE_16_1_14(id, { backupBefore: backupBefore });
+    }
+
+    renderTools();
+  `);
+  htmlParts.push('</script>');
+  htmlParts.push('</body></html>');
 
   SpreadsheetApp.getUi().showModalDialog(
-    HtmlService.createHtmlOutput(html).setWidth(1280).setHeight(760),
+    HtmlService.createHtmlOutput(htmlParts.join("\n")).setWidth(1280).setHeight(760),
     "GFP — Central de Ferramentas"
   );
 }
 
 
 /**
- * Registro controlado de ferramentas autorizadas.
- *
- * GREEN  = diagnóstico / geralmente não altera dados.
- * YELLOW = altera algo ou abre rotina de alteração assistida.
- * RED    = bloqueado na Central.
+ * Lista controlada revisada.
+ * Não inclui funções já disponíveis no menu principal.
+ * Não inclui cards bloqueados.
  */
 function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
   return [
+    {
+      id: "painel_auditorias",
+      title: "Painel de Auditorias",
+      fn: "GFP_PAINEL_AUDITORIAS_OPEN_16_1_17",
+      risk: "GREEN",
+      group: "Auditoria",
+      description: "Abre painel visual leve com resumo da saúde do sistema. Não altera dados.",
+      tags: ["auditoria", "painel", "diagnóstico"]
+    },
+    {
+      id: "arquivos_importados",
+      title: "Analisar / arquivar arquivos já importados",
+      fn: "GFP_ARQUIVOS_IMPORTADOS_MODAL_16_1_16",
+      risk: "GREEN",
+      group: "Arquivos / Drive",
+      description: "Abre painel para analisar PDFs/CSVs/TXTs da pasta de importação e mover para IMPORTADOS somente os confirmados por ID_ARQUIVO/fileId.",
+      tags: ["drive", "arquivos", "importação", "organização"]
+    },
     {
       id: "auditar_as",
       title: "Auditar A:S / Metadados",
@@ -491,22 +755,40 @@ function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
       tags: ["categorias", "diagnóstico"]
     },
     {
-      id: "backup_excel",
-      title: "Fazer backup de segurança",
-      fn: "GFP_BACKUP_SEGURANCA_EXCEL_16_1_2",
+      id: "diagnosticar_pasta_backup",
+      title: "Diagnosticar pasta de backup",
+      fn: "GFP_BACKUP_DIAGNOSTICAR_PASTA_16_1_2",
       risk: "GREEN",
       group: "Backup",
-      description: "Cria um backup Excel da planilha. Não altera a base financeira.",
-      tags: ["backup", "segurança"]
+      description: "Confere a estrutura/pasta usada pelos backups, sem criar backup novo.",
+      tags: ["backup", "diagnóstico", "drive"]
     },
     {
-      id: "conferir_totais_fatura",
-      title: "Conferir totais de fatura",
-      fn: "runInvoiceSummaryCheck",
+      id: "debug_dashboard",
+      title: "Debug rápido do Dashboard",
+      fn: "GFP_DASHBOARD_V2_DEBUG_14_10",
       risk: "GREEN",
-      group: "Conferência",
-      description: "Roda a conferência de totais de fatura já existente no sistema.",
-      tags: ["fatura", "conferência"]
+      group: "Dashboard",
+      description: "Gera diagnóstico rápido do Dashboard no Logger/toast. Não altera a base financeira.",
+      tags: ["dashboard", "diagnóstico"]
+    },
+    {
+      id: "dry_clean_meta_nao_cartao",
+      title: "Simular limpeza de metadados de fatura em linhas não-cartão",
+      fn: "GFP_CLEAN_NON_CARD_CASH_METADATA_DRYRUN",
+      risk: "GREEN",
+      group: "Metadados",
+      description: "Simula remoção de cashMonth/invoiceDueDate indevidos em linhas que não são cartão/fatura. Não altera dados.",
+      tags: ["metadados", "fatura", "dry-run"]
+    },
+    {
+      id: "dry_backfill_cashmonth",
+      title: "Simular preenchimento de cashMonth de faturas antigas",
+      fn: "GFP_BACKFILL_INVOICE_CASH_METADATA_DRYRUN",
+      risk: "GREEN",
+      group: "Metadados",
+      description: "Simula preenchimento de metadados de caixa/vencimento em linhas antigas de cartão. Não altera dados.",
+      tags: ["cashMonth", "fatura", "dry-run"]
     },
     {
       id: "simular_migracao_categorias",
@@ -515,30 +797,10 @@ function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
       args: [true],
       risk: "GREEN",
       group: "Categorias",
-      description: "Simula a troca de categorias antigas por novas. Não altera dados.",
+      description: "Simula troca de categorias antigas por novas. Não altera dados.",
       tags: ["categorias", "simulação"]
     },
 
-    {
-      id: "aplicar_migracao_categorias",
-      title: "Aplicar migração de categorias legadas",
-      fn: "GFP_APLICAR_MIGRACAO_CATEGORIAS_LEGADAS_16_1_13",
-      risk: "YELLOW",
-      group: "Categorias",
-      backup: true,
-      description: "Substitui categorias antigas pelas novas em DB_TRANSACOES e DB_TRANSACOES_HIST. Use apenas quando necessário.",
-      tags: ["categorias", "altera dados"]
-    },
-    {
-      id: "estornos_cancelamentos",
-      title: "Estornos / Cancelamentos",
-      fn: "GFP_ESTORNOS_MARCAR_SELECIONADOS_16_1_11",
-      risk: "YELLOW",
-      group: "Reparos",
-      backup: true,
-      description: "Abre a central de estornos/cancelamentos para as linhas selecionadas na DB_TRANSACOES.",
-      tags: ["estornos", "cancelamentos", "seleção"]
-    },
     {
       id: "ordenar_as_defensivo",
       title: "Ordenar DB_TRANSACOES com blindagem A:S",
@@ -559,46 +821,75 @@ function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
       description: "Abre reparo assistido para corrigir somente a coluna METADADOS das linhas selecionadas.",
       tags: ["metadados", "reparo", "seleção"]
     },
-
     {
-      id: "bloqueado_importacao",
-      title: "Importar Extratos",
-      fn: "pipelineExecute",
-      risk: "RED",
-      group: "Bloqueado",
-      blocked: true,
-      description: "Função sensível. Deve continuar sendo usada pelo menu principal, não pela Central.",
-      tags: ["importação", "bloqueado"]
+      id: "aplicar_checkbox_pendencias",
+      title: "Aplicar checkboxes em pendências categorizadas",
+      fn: "GFP_APLICAR_CHECKBOX_PENDENCIAS_CATEGORIZADAS_14_3_1",
+      risk: "YELLOW",
+      group: "Visual / Revisão",
+      backup: true,
+      description: "Transforma pendências categorizadas em checkboxes aprováveis na coluna STATUS.",
+      tags: ["checkbox", "status", "revisão"]
     },
     {
-      id: "bloqueado_arquivar_ok",
-      title: "Arquivar Linhas OK",
-      fn: "GFP_ARQUIVAR_LINHAS_OK_15_2",
-      risk: "RED",
-      group: "Bloqueado",
-      blocked: true,
-      description: "Arquivamento global. Deve continuar no menu principal, com consciência de que move todas as linhas OK.",
-      tags: ["arquivamento", "bloqueado"]
+      id: "compactar_notas_auto",
+      title: "Compactar notas automáticas longas",
+      fn: "GFP_COMPACTAR_NOTAS_GLOBAIS_DB_TRANSACOES_14_5_1",
+      risk: "YELLOW",
+      group: "Visual / Notas",
+      backup: true,
+      description: "Move notas automáticas longas para nota de célula e deixa texto curto visível.",
+      tags: ["notas", "visual", "limpeza"]
     },
     {
-      id: "bloqueado_gemini",
-      title: "Gemini / Recalibração manual",
-      fn: "várias funções",
-      risk: "RED",
-      group: "Bloqueado",
-      blocked: true,
-      description: "Não expor por enquanto. Gemini/recalibração pesada ficam fora da Central até decisão específica.",
-      tags: ["gemini", "recalibração", "bloqueado"]
+      id: "compactar_notas_gemini",
+      title: "Compactar notas longas do Gemini",
+      fn: "GFP_COMPACTAR_NOTAS_GEMINI_PARA_NOTAS_DE_CELULA_14_1_1",
+      risk: "YELLOW",
+      group: "Visual / Notas",
+      backup: true,
+      description: "Compacta notas longas do Gemini/Modelo para melhorar leitura da DB_TRANSACOES.",
+      tags: ["notas", "gemini", "visual"]
     },
     {
-      id: "bloqueado_reset",
-      title: "Reset / Limpeza de base",
-      fn: "funções de reset",
-      risk: "RED",
-      group: "Bloqueado",
-      blocked: true,
-      description: "Funções de reset ou limpeza ampla não entram na Central para evitar execução acidental.",
-      tags: ["reset", "bloqueado"]
+      id: "humanizar_logs",
+      title: "Humanizar SYS_LOGS existente",
+      fn: "GFP_SYS_LOGS_HUMANIZAR_EXISTENTE_16_1_4",
+      risk: "YELLOW",
+      group: "Logs",
+      backup: true,
+      description: "Limpa e reorganiza SYS_LOGS em linguagem mais humana. Não mexe na base financeira.",
+      tags: ["logs", "visual"]
+    },
+    {
+      id: "restaurar_logs_antigos",
+      title: "Restaurar padrão simples do SYS_LOGS",
+      fn: "GFP_SYS_LOGS_RESTAURAR_PADRAO_ANTIGO_16_1_2",
+      risk: "YELLOW",
+      group: "Logs",
+      backup: true,
+      description: "Restaura SYS_LOGS para o padrão simples: quando, tipo, área, o que aconteceu e observação.",
+      tags: ["logs", "formatação"]
+    },
+    {
+      id: "aplicar_migracao_categorias",
+      title: "Aplicar migração de categorias legadas",
+      fn: "GFP_APLICAR_MIGRACAO_CATEGORIAS_LEGADAS_16_1_13",
+      risk: "YELLOW",
+      group: "Categorias",
+      backup: true,
+      description: "Substitui categorias antigas pelas novas em DB_TRANSACOES e DB_TRANSACOES_HIST. Use apenas quando necessário.",
+      tags: ["categorias", "altera dados"]
+    },
+    {
+      id: "apply_clean_meta_nao_cartao",
+      title: "Aplicar limpeza de metadados de fatura em linhas não-cartão",
+      fn: "GFP_CLEAN_NON_CARD_CASH_METADATA_APPLY",
+      risk: "YELLOW",
+      group: "Metadados",
+      backup: true,
+      description: "Remove metadados de fatura indevidos em linhas que não são cartão/fatura. Use após simular.",
+      tags: ["metadados", "fatura", "altera dados"]
     }
   ];
 }
@@ -617,16 +908,6 @@ function GFP_CENTRAL_FERRAMENTAS_EXECUTE_16_1_14(id, options) {
       ok: false,
       error: "Ferramenta não encontrada na whitelist.",
       id: id
-    };
-  }
-
-  if (tool.blocked || tool.risk === "RED") {
-    return {
-      ok: false,
-      blocked: true,
-      error: "Ferramenta bloqueada na Central.",
-      title: tool.title,
-      fn: tool.fn
     };
   }
 
@@ -696,18 +977,6 @@ function GFP_CENTRAL_FERRAMENTAS_GET_FN_16_1_14_(name) {
 
 function GFP_CENTRAL_FERRAMENTAS_LOG_16_1_14_(out) {
   try {
-    if (typeof Logger === "function" && Logger.log !== console.log) {
-      Logger.log(
-        "Central de Ferramentas: " + (out.title || out.id) + " executada.",
-        "Central de Ferramentas",
-        null,
-        out.ok ? "OK" : "WARN"
-      );
-      return;
-    }
-  } catch (e) {}
-
-  try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sh = ss.getSheetByName("SYS_LOGS");
 
@@ -721,5 +990,5 @@ function GFP_CENTRAL_FERRAMENTAS_LOG_16_1_14_(out) {
       "Central de Ferramentas: " + (out.title || out.id),
       out.ok ? "" : (out.error || "")
     ]]);
-  } catch (e2) {}
+  } catch (e) {}
 }
