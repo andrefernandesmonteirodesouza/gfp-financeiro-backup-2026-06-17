@@ -1,7 +1,33 @@
 /**
  * 📂 ARQUIVO: 3_RULES/inteligencia_controlada_16_1_18_4.gs
  * 🧠 MÓDULO: INTELIGÊNCIA CONTROLADA
- * 🔢 VERSÃO: 16.1.18.4
+ * 🔢 VERSÃO: 16.1.18.4.3
+ * 📅 DATA: 2026-06-18
+ *
+ * 📝 HISTÓRICO:
+ * - 16.1.18.4   (original): Repescagem por Modelo Interno + Re-Gemini Controlado.
+ * - 16.1.18.4.1: Menu de inteligência (arquivo separado).
+ * - 16.1.18.4.2: Configuração de cota do Re-Gemini.
+ * - 16.1.18.4.3: CORREÇÃO (André + Claude, 2026-06-18) — Bug do checkbox/validação
+ *   "Inválido: o conteúdo desta célula viola a regra de validação" na coluna I
+ *   (STATUS) após "Repescagem com modelo interno" e após Re-Gemini Controlado.
+ *
+ *   CAUSA RAIZ: GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_ e
+ *   GFP_REGEMINI_CONTROLADO_APPLY_16_1_18_4_ escreviam o novo status (ex.:
+ *   "MODELO_FORTE") direto na célula via setValue(), sem atualizar a regra de
+ *   data validation (checkbox) instalada por GFP_APLICAR_CHECKBOX_APROVACAO_GEMINI_14_2_1.
+ *   Essa regra usa o status ANTIGO como "valor desmarcado"; ao trocar o texto da
+ *   célula sem trocar a regra, o conteúdo deixa de corresponder a "OK" ou ao valor
+ *   antigo aceito pela validação → Sheets exibe o aviso vermelho de inválido
+ *   (setAllowInvalid(true) permite salvar, mas mantém o aviso visual).
+ *
+ *   CORREÇÃO: nova função privada GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_,
+ *   chamada nos dois pontos onde a coluna I é escrita (antes linhas 310 e 537),
+ *   que reaplica o checkbox com o status NOVO como valor desmarcado quando ainda
+ *   elegível, ou remove a validação quando deixou de ser elegível — mantendo a
+ *   célula sempre coerente com seu próprio conteúdo. Reaproveita as funções já
+ *   existentes GFP_statusAprovavelPorCheckbox_14_2_1_ e GFP_isCategoriaValida_14_2_1_
+ *   de aprovacao_checkbox_gemini_14_2_1.gs (nenhuma lógica duplicada).
  */
 
 const GFP_INTEL_PATCH_16_1_18_4 = "16.1.18.4";
@@ -307,7 +333,7 @@ function GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_(db, modelSheet, limit)
     }
 
     db.getRange(sheetRow, 6).setValue(decision.categoriaNova);
-    db.getRange(sheetRow, 9).setValue(decision.statusNovo);
+    GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(db, sheetRow, decision.statusNovo, decision.categoriaNova, tipo);
     db.getRange(sheetRow, 10).setValue(decision.noteShort).setNote(decision.noteFull);
     db.getRange(sheetRow, 14).setValue(JSON.stringify(decision.metaNova));
 
@@ -348,6 +374,63 @@ function GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_(db, modelSheet, limit)
     skippedBecauseExistingWasBetter: skippedBetter,
     examples: examples
   };
+}
+
+
+/**
+ * 🛡️ CORREÇÃO 16.1.18.4.3
+ *
+ * Sincroniza a validação de checkbox da coluna I (STATUS) toda vez que este
+ * módulo escreve um novo status diretamente. Sem isto, a regra de validação
+ * instalada por GFP_APLICAR_CHECKBOX_APROVACAO_GEMINI_14_2_1 continua presa ao
+ * status ANTIGO e a célula passa a exibir "Inválido: o conteúdo desta célula
+ * viola a regra de validação" (red border), pois o texto novo não corresponde
+ * nem a "OK" nem ao valor antigo aceito pela regra.
+ *
+ * Comportamento:
+ * - Se o novo status ainda é elegível para checkbox (GFP_statusAprovavelPorCheckbox_14_2_1_)
+ *   e a categoria/tipo da linha continuam válidos, reaplica o checkbox com o
+ *   status NOVO como valor desmarcado — exatamente o padrão usado em
+ *   aprovacao_checkbox_gemini_14_2_1.gs, só que linha a linha.
+ * - Se deixou de ser elegível, remove a validação antiga (clearDataValidations)
+ *   para não deixar uma regra divergente travada na célula.
+ * - Erros de validação (cosmético) nunca impedem a escrita do status real.
+ *
+ * @param {Sheet} sh - aba DB_TRANSACOES
+ * @param {number} sheetRow - linha (1-indexed)
+ * @param {string} novoStatus - novo valor de STATUS já decidido
+ * @param {string} categoriaParaElegibilidade - categoria efetivamente gravada na linha
+ * @param {string} tipo - tipo da transação (coluna D)
+ */
+function GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(sh, sheetRow, novoStatus, categoriaParaElegibilidade, tipo) {
+  try {
+    const cell = sh.getRange(sheetRow, 9); // I = STATUS
+    const tipoUpper = String(tipo || "").trim().toUpperCase();
+
+    const elegivel =
+      typeof GFP_statusAprovavelPorCheckbox_14_2_1_ === "function" &&
+      typeof GFP_isCategoriaValida_14_2_1_ === "function" &&
+      GFP_statusAprovavelPorCheckbox_14_2_1_(novoStatus) &&
+      tipoUpper !== "T" &&
+      tipoUpper !== "S" &&
+      GFP_isCategoriaValida_14_2_1_(categoriaParaElegibilidade);
+
+    if (elegivel) {
+      const validation = SpreadsheetApp.newDataValidation()
+        .requireCheckbox("OK", novoStatus)
+        .setAllowInvalid(true)
+        .build();
+
+      cell.setDataValidation(validation);
+      cell.setValue(novoStatus);
+    } else {
+      cell.clearDataValidations();
+      cell.setValue(novoStatus);
+    }
+  } catch (eCheckbox) {
+    Logger.log("[16.1.18.4.3] Falha ao sincronizar checkbox da linha " + sheetRow + ": " + eCheckbox.message);
+    try { sh.getRange(sheetRow, 9).setValue(novoStatus); } catch (eFallback) {}
+  }
 }
 
 
@@ -534,7 +617,13 @@ function GFP_REGEMINI_CONTROLADO_APPLY_16_1_18_4_(db, apiKey, safeLimit) {
       db.getRange(rowNumber, 6).setValue(category);
     }
 
-    db.getRange(rowNumber, 9).setValue(newStatus);
+    GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(
+      db,
+      rowNumber,
+      newStatus,
+      band.shouldWriteCategory ? category : oldCategory,
+      input.tipo
+    );
 
     const note = GFP_INTEL_NOTE_SHORT_16_1_18_4_("GEMINI", newStatus, confidence);
     const noteFull = [
