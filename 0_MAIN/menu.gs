@@ -23,6 +23,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🧾 Conferir Totais de Fatura', 'conferirTotaisFaturaWrapper')
     .addItem('💾 Fazer backup de segurança', 'fazerBackupSegurancaWrapper')
+    .addItem('🧰 Central de Ferramentas', 'GFP_MENU_CENTRAL_FERRAMENTAS_16_1_14')
     .addToUi();
 }
 
@@ -134,4 +135,8 @@ function GFP_MENU_ESTORNOS_CANCELAMENTOS_16_1_11() {
   }
 
   return GFP_ESTORNOS_MARCAR_SELECIONADOS_16_1_11();
+}
+
+function GFP_MENU_CENTRAL_FERRAMENTAS_16_1_14() {
+  return GFP_CENTRAL_FERRAMENTAS_OPEN_16_1_14();
 }
