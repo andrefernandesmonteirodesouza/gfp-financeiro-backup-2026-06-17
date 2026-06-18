@@ -1,14 +1,26 @@
 /**
  * 📂 ARQUIVO: 3_RULES/gemini_fallback_controlado.gs
  * 🧠 MÓDULO: GEMINI FALLBACK CONTROLADO COM FAIXA VISUAL
- * 🔢 VERSÃO: 14.1.0
- * 📅 DATA: 09/06/2026
+ * 🔢 VERSÃO: 14.1.1
+ * 📅 DATA: 09/06/2026 (14.1.0) | 18/06/2026 (14.1.1)
  * 👤 AUTOR OPERACIONAL: André Fernandes
  * -----------------------------------------------------------------------------
  * OBJETIVO:
  * Usar Gemini como retaguarda controlada para sugerir categorias com faixas
  * visuais de confiança, sem marcar OK automaticamente.
  *
+ * 📝 HISTÓRICO:
+ * - 14.1.0: versão original.
+ * - 14.1.1: CORREÇÃO (André + Claude, 2026-06-18) — GFP_callGeminiForCategorySuggestions_
+ *   desistia na primeira falha HTTP, incluindo erros 503/429 que são tipicamente
+ *   transitórios ("modelo sobrecarregado, tente novamente"). Sem retry, qualquer
+ *   instabilidade momentânea do Gemini abortava a rodada inteira (Repescagem
+ *   Inteligente e Re-Gemini Controlado, que reaproveitam esta mesma função).
+ *   Agora há até 3 tentativas com espera progressiva (1s, 2s, 4s) somente para
+ *   códigos retornáveis (429, 500, 502, 503, 504); outros códigos (ex.: 400, 401,
+ *   403 — chave inválida/revogada) continuam falhando imediatamente, sem retry
+ *   inútil.
+ * -----------------------------------------------------------------------------
  * ESCALA OFICIAL:
  * 95% a 100%  → GEMINI_FORTE
  * 80% a 94%   → GEMINI_MEDIO
@@ -342,12 +354,28 @@ function GFP_callGeminiForCategorySuggestions_(apiKey, candidates, categories) {
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(url, options);
-  const code = response.getResponseCode();
-  const body = response.getContentText();
+  // 🛡️ CORREÇÃO 14.1.1 — retry com espera progressiva para falhas transitórias.
+  const RETRYABLE_CODES = [429, 500, 502, 503, 504];
+  const MAX_ATTEMPTS = 3;
+  let response, code, body;
 
-  if (code !== 200) {
-    throw new Error(`Gemini API falhou. HTTP ${code}: ${body}`);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    response = UrlFetchApp.fetch(url, options);
+    code = response.getResponseCode();
+    body = response.getContentText();
+
+    if (code === 200) break;
+
+    const retryable = RETRYABLE_CODES.indexOf(code) >= 0;
+    const isLastAttempt = attempt === MAX_ATTEMPTS;
+
+    if (!retryable || isLastAttempt) {
+      throw new Error(`Gemini API falhou. HTTP ${code}: ${body}`);
+    }
+
+    const waitMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+    Logger.log(`[14.1.1] Gemini HTTP ${code} (tentativa ${attempt}/${MAX_ATTEMPTS}). Tentando de novo em ${waitMs}ms...`);
+    Utilities.sleep(waitMs);
   }
 
   const json = JSON.parse(body);
