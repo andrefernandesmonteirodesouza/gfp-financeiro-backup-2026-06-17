@@ -1,7 +1,7 @@
 /**
  * 📂 ARQUIVO: 3_RULES/inteligencia_controlada_16_1_18_4.gs
  * 🧠 MÓDULO: INTELIGÊNCIA CONTROLADA
- * 🔢 VERSÃO: 16.1.18.4.3
+ * 🔢 VERSÃO: 16.1.18.4.4
  * 📅 DATA: 2026-06-18
  *
  * 📝 HISTÓRICO:
@@ -28,6 +28,34 @@
  *   célula sempre coerente com seu próprio conteúdo. Reaproveita as funções já
  *   existentes GFP_statusAprovavelPorCheckbox_14_2_1_ e GFP_isCategoriaValida_14_2_1_
  *   de aprovacao_checkbox_gemini_14_2_1.gs (nenhuma lógica duplicada).
+ *
+ * - 16.1.18.4.4: CORREÇÃO (André + Claude, 2026-06-18) — Exception "Por favor,
+ *   selecione uma categoria válida da lista." ao rodar "Repescar só com modelo
+ *   interno" e "Repescagem inteligente".
+ *
+ *   CAUSA RAIZ (confirmada com dados reais da planilha viva): a coluna F
+ *   (CATEGORIA) de DB_TRANSACOES tem validação em modo "reject invalid"
+ *   (setAllowInvalid(false), ver 1_CORE/core_datalake.gs). 55 das 389 linhas
+ *   de CFG_Modelo_Classificacao (coluna E, CATEGORIA_SUGERIDA) ainda guardam
+ *   textos de categoria ANTIGOS, de antes da consolidação 99.x e dos renames
+ *   cosméticos (ex.: "01.05 — Receitas — Maria Brasileira — Reembolsos",
+ *   "02.17 — Despesas — Maria Brasileira — Maria Brasileira",
+ *   "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café", etc.).
+ *   Quando o modelo "casa" com uma dessas linhas, GFP_PREMODEL_findBestModelMatch_14_5_
+ *   devolve a categoria antiga, e o setValue() na coluna F é rejeitado pelo
+ *   Sheets — o que, sem try/catch, abortava IMEDIATAMENTE toda a repescagem
+ *   (não só a linha problemática).
+ *
+ *   CORREÇÃO (duas camadas, sem duplicar lógica):
+ *   1) Causa raiz: 3_RULES/modelo_preclassificador_14_5.gs agora normaliza a
+ *      categoria no momento de carregar o modelo (GFP_PREMODEL_loadModel_14_5_),
+ *      reaproveitando GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_ e o mapa
+ *      GFP_CATEGORIAS_MIGRATION_MAP_16_1_13_ já existentes em core_datalake.gs.
+ *   2) Defesa em profundidade: os dois pontos de escrita da coluna F neste
+ *      arquivo (modelo interno e Re-Gemini) agora estão dentro de try/catch.
+ *      Se uma categoria ainda assim for rejeitada (ex.: rename futuro ainda
+ *      não mapeado), só aquela linha é pulada e contada em
+ *      skippedBecauseCategoriaInvalida — o restante do lote continua normal.
  */
 
 const GFP_INTEL_PATCH_16_1_18_4 = "16.1.18.4";
@@ -292,7 +320,9 @@ function GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_(db, modelSheet, limit)
   let scanned = 0;
   let updated = 0;
   let skippedBetter = 0;
+  let erroCategoria = 0;
   const examples = [];
+  const erros = [];
 
   for (let i = 0; i < values.length; i++) {
     if (updated >= safeLimit) break;
@@ -332,10 +362,22 @@ function GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_(db, modelSheet, limit)
       continue;
     }
 
-    db.getRange(sheetRow, 6).setValue(decision.categoriaNova);
-    GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(db, sheetRow, decision.statusNovo, decision.categoriaNova, tipo);
-    db.getRange(sheetRow, 10).setValue(decision.noteShort).setNote(decision.noteFull);
-    db.getRange(sheetRow, 14).setValue(JSON.stringify(decision.metaNova));
+    try {
+      db.getRange(sheetRow, 6).setValue(decision.categoriaNova);
+      GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(db, sheetRow, decision.statusNovo, decision.categoriaNova, tipo);
+      db.getRange(sheetRow, 10).setValue(decision.noteShort).setNote(decision.noteFull);
+      db.getRange(sheetRow, 14).setValue(JSON.stringify(decision.metaNova));
+    } catch (eWrite) {
+      // CAUSA TÍPICA: CFG_Modelo_Classificacao com categoria antiga/renomeada que
+      // não existe mais em CFG_Categorias (validação da coluna F é "reject invalid").
+      // Não deixamos uma linha ruim abortar a repescagem inteira das demais.
+      erroCategoria++;
+      if (erros.length < 20) {
+        erros.push({ row: sheetRow, categoria: decision.categoriaNova, erro: eWrite.message });
+      }
+      Logger.log("[16.1.18.4.4] Linha " + sheetRow + " ignorada (categoria rejeitada): " + eWrite.message);
+      continue;
+    }
 
     updated++;
 
@@ -372,7 +414,9 @@ function GFP_REAVALIAR_DB_MODELO_INTERNO_APPLY_16_1_18_4_(db, modelSheet, limit)
     scanned: scanned,
     updated: updated,
     skippedBecauseExistingWasBetter: skippedBetter,
-    examples: examples
+    skippedBecauseCategoriaInvalida: erroCategoria,
+    examples: examples,
+    errosCategoria: erros
   };
 }
 
@@ -551,7 +595,9 @@ function GFP_REGEMINI_CONTROLADO_APPLY_16_1_18_4_(db, apiKey, safeLimit) {
   categories.forEach(c => validSet[c] = true);
 
   let applied = 0;
+  let erroCategoria = 0;
   const examples = [];
+  const erros = [];
 
   suggestions.forEach(sug => {
     const rowNumber = Number(sug.row);
@@ -613,36 +659,47 @@ function GFP_REGEMINI_CONTROLADO_APPLY_16_1_18_4_(db, apiKey, safeLimit) {
       reGeminiAt: new Date().toISOString()
     });
 
-    if (band.shouldWriteCategory) {
-      db.getRange(rowNumber, 6).setValue(category);
+    try {
+      if (band.shouldWriteCategory) {
+        db.getRange(rowNumber, 6).setValue(category);
+      }
+
+      GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(
+        db,
+        rowNumber,
+        newStatus,
+        band.shouldWriteCategory ? category : oldCategory,
+        input.tipo
+      );
+
+      const note = GFP_INTEL_NOTE_SHORT_16_1_18_4_("GEMINI", newStatus, confidence);
+      const noteFull = [
+        "GFP — Re-Gemini Controlado",
+        "",
+        "Patch: " + GFP_INTEL_PATCH_16_1_18_4,
+        "Status anterior: " + oldStatus,
+        "Categoria anterior: " + oldCategory,
+        "Status novo: " + newStatus,
+        "Categoria sugerida: " + category,
+        "Confiança: " + confidence + "%",
+        "",
+        "Motivo: " + reason,
+        "",
+        "Regra: Re-Gemini não substitui MODELO_FORTE/MODELO_MEDIO e respeita cota diária."
+      ].join("\n");
+
+      db.getRange(rowNumber, 10).setValue(note).setNote(noteFull);
+      metaCell.setValue(JSON.stringify(meta));
+    } catch (eWrite) {
+      // Mesma defesa do caminho do modelo: categoria rejeitada pela validação
+      // da coluna F não pode abortar o restante das sugestões do Re-Gemini.
+      erroCategoria++;
+      if (erros.length < 20) {
+        erros.push({ row: rowNumber, categoria: category, erro: eWrite.message });
+      }
+      Logger.log("[16.1.18.4.4] Linha " + rowNumber + " ignorada no Re-Gemini (categoria rejeitada): " + eWrite.message);
+      return;
     }
-
-    GFP_INTEL_SYNC_CHECKBOX_STATUS_16_1_18_4_(
-      db,
-      rowNumber,
-      newStatus,
-      band.shouldWriteCategory ? category : oldCategory,
-      input.tipo
-    );
-
-    const note = GFP_INTEL_NOTE_SHORT_16_1_18_4_("GEMINI", newStatus, confidence);
-    const noteFull = [
-      "GFP — Re-Gemini Controlado",
-      "",
-      "Patch: " + GFP_INTEL_PATCH_16_1_18_4,
-      "Status anterior: " + oldStatus,
-      "Categoria anterior: " + oldCategory,
-      "Status novo: " + newStatus,
-      "Categoria sugerida: " + category,
-      "Confiança: " + confidence + "%",
-      "",
-      "Motivo: " + reason,
-      "",
-      "Regra: Re-Gemini não substitui MODELO_FORTE/MODELO_MEDIO e respeita cota diária."
-    ].join("\n");
-
-    db.getRange(rowNumber, 10).setValue(note).setNote(noteFull);
-    metaCell.setValue(JSON.stringify(meta));
 
     applied++;
 
@@ -680,7 +737,9 @@ function GFP_REGEMINI_CONTROLADO_APPLY_16_1_18_4_(db, apiKey, safeLimit) {
     candidates: candidates.length,
     suggestionsReceived: Array.isArray(suggestions) ? suggestions.length : 0,
     applied: applied,
+    skippedBecauseCategoriaInvalida: erroCategoria,
     examples: examples,
+    errosCategoria: erros,
     quota: GFP_REGEMINI_STATUS_COTA_16_1_18_4()
   };
 }

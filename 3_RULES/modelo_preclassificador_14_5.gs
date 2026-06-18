@@ -1,8 +1,8 @@
 /**
  * 📂 ARQUIVO: 3_RULES/modelo_preclassificador_14_5.gs
  * 🧠 MÓDULO: MODELO ANTES DO GEMINI
- * 🔢 VERSÃO: 14.5.0
- * 📅 DATA: 10/06/2026
+ * 🔢 VERSÃO: 14.5.1
+ * 📅 DATA: 10/06/2026 (14.5.0) | 18/06/2026 (14.5.1)
  * 👤 AUTOR OPERACIONAL: André Fernandes
  * -----------------------------------------------------------------------------
  * OBJETIVO:
@@ -11,6 +11,19 @@
  * O modelo próprio não aprova nada.
  * Ele apenas grava MODELO_FORTE/MEDIO/FRACO/BAIXO/BLOQUEADO.
  * -----------------------------------------------------------------------------
+ * 📝 HISTÓRICO:
+ * - 14.5.0: versão original.
+ * - 14.5.1: CORREÇÃO (André + Claude, 2026-06-18) — causa raiz da exception
+ *   "Por favor, selecione uma categoria válida da lista." ao repescar.
+ *   GFP_PREMODEL_loadModel_14_5_ lia a coluna E (CATEGORIA_SUGERIDA) de
+ *   CFG_Modelo_Classificacao sem normalizar; 55/389 linhas ainda tinham
+ *   texto de categoria ANTIGO (de antes da consolidação 99.x e dos renames
+ *   cosméticos), o que a validação "reject invalid" da coluna F de
+ *   DB_TRANSACOES recusava. Agora a categoria é normalizada no momento da
+ *   carga, reaproveitando GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_ e
+ *   GFP_CATEGORIAS_MIGRATION_MAP_16_1_13_ (já existentes em core_datalake.gs,
+ *   nenhuma lógica duplicada). Corrige na fonte para TODOS os consumidores
+ *   do modelo, não só a repescagem.
  */
 
 const GFP_PREMODEL_PROP_14_5 = "GFP_ENABLE_MODELO_PRECLASSIFICADOR_14_5";
@@ -232,7 +245,7 @@ function GFP_PREMODEL_loadModel_14_5_(sh) {
       padraoOriginal: String(row[1] || "").trim(),
       conta: String(row[2] || "*").trim() || "*",
       tipo: String(row[3] || "*").trim().toUpperCase() || "*",
-      categoria: String(row[4] || "").trim(),
+      categoria: GFP_PREMODEL_NORMALIZAR_CATEGORIA_14_5_(String(row[4] || "").trim()),
       negadas: GFP_PREMODEL_parseList_14_5_(row[5]),
       acertos: Number(row[6] || 0),
       erros: Number(row[7] || 0),
@@ -246,6 +259,23 @@ function GFP_PREMODEL_loadModel_14_5_(sh) {
       hash: String(row[19] || "").trim()
     };
   }).filter(m => m.chave && m.categoria);
+}
+
+/**
+ * 🛡️ CORREÇÃO 14.5.1 — normaliza a categoria lida de CFG_Modelo_Classificacao
+ * usando o mesmo mapa de migração de categorias já existente em
+ * core_datalake.gs, para que o modelo nunca devolva texto de categoria
+ * antigo/renomeado (o que a validação "reject invalid" da coluna F de
+ * DB_TRANSACOES recusaria com a exception "selecione uma categoria válida").
+ *
+ * Guard defensivo: se a função de migração não existir (ex.: arquivo ainda
+ * não atualizado), retorna o valor original sem quebrar nada.
+ */
+function GFP_PREMODEL_NORMALIZAR_CATEGORIA_14_5_(categoria) {
+  if (typeof GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_ === "function") {
+    return GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_(categoria);
+  }
+  return categoria;
 }
 
 /**
