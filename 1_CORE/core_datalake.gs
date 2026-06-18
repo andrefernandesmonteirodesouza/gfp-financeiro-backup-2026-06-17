@@ -20,8 +20,12 @@
 
 function coreDatalakePersistence(payload) {
   const functionName = "coreDatalakePersistence";
-  Logger.log(`[START] Salvando ${payload.normalized.length} itens.`, functionName);
+  const txPatch = "16.1.18";
 
+  Logger.log("[START] Salvando " + ((payload && payload.normalized && payload.normalized.length) || 0) + " itens.", functionName);
+
+  if (!payload) payload = {};
+  if (!payload.meta) payload.meta = {};
   if (!payload.normalized || payload.normalized.length === 0) return payload;
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -55,8 +59,12 @@ function coreDatalakePersistence(payload) {
     sheet.hideColumns(11, 4);
   }
 
-  // GFP 16.1.12 — garante que a mesa exista até A:S antes de qualquer sort/movimento.
-  GFP_DATALAKE_ensureWorkAS_16_1_12_(sheet);
+  // Garante A:S antes da gravação.
+  if (typeof GFP_DATALAKE_ensureWorkAS_16_1_12_ === "function") {
+    GFP_DATALAKE_ensureWorkAS_16_1_12_(sheet);
+  } else {
+    GFP_DATALAKE_ENSURE_WORK_AS_FALLBACK_16_1_18_(sheet);
+  }
 
   // Formatações gerais.
   sheet.getRange("A:A").setNumberFormat("dd/mm/yyyy").setHorizontalAlignment("center");
@@ -73,7 +81,7 @@ function coreDatalakePersistence(payload) {
     .setAllowInvalid(false)
     .build();
 
-  payload.normalized.forEach(item => {
+  payload.normalized.forEach(function(item) {
     let showCurrent = (item.installments && item.installments.total > 1) ? item.installments.current : "";
     let showTotal = (item.installments && item.installments.total > 1) ? item.installments.total : "";
 
@@ -89,7 +97,6 @@ function coreDatalakePersistence(payload) {
     const noteToSave = item.userNote || "";
     const statusToSave = "";
 
-    // A:N continuam sendo a estrutura oficial da transação.
     newRows.push([
       dateObj,
       item.description,
@@ -102,9 +109,9 @@ function coreDatalakePersistence(payload) {
       statusToSave,
       noteToSave,
       item.id,
-      item.meta?.fileId || "",
+      item.meta && item.meta.fileId || "",
       item.id || "",
-      JSON.stringify(item.meta)
+      JSON.stringify(item.meta || {})
     ]);
 
     const rowColor = new Array(14).fill("#ffffff");
@@ -119,25 +126,45 @@ function coreDatalakePersistence(payload) {
     backgrounds.push(rowColor);
   });
 
-  if (newRows.length > 0) {
-    const lastRow = sheet.getLastRow();
-    const numRows = newRows.length;
+  if (newRows.length === 0) return payload;
 
+  const beforeLastRow = sheet.getLastRow();
+  const beforeMaxRows = sheet.getMaxRows();
+  const startRow = beforeLastRow + 1;
+  const numRows = newRows.length;
+
+  const tx = {
+    patch: txPatch,
+    startedAt: new Date().toISOString(),
+    beforeLastRow: beforeLastRow,
+    beforeMaxRows: beforeMaxRows,
+    startRow: startRow,
+    expectedRows: numRows,
+    writeVerified: null,
+    sort: null,
+    sortWarning: null,
+    postSortVerified: null,
+    rollback: null
+  };
+
+  let canRollbackAppendBlock = true;
+
+  try {
     // 1. Grava valores oficiais A:N.
-    const range = sheet.getRange(lastRow + 1, 1, numRows, 14);
+    const range = sheet.getRange(startRow, 1, numRows, 14);
     range.setValues(newRows);
 
     // 2. Grava cores A:N.
     range.setBackgrounds(backgrounds);
 
-    // 3. Garante O:S em branco para as novas linhas, evitando sobras de helper antigo.
-    sheet.getRange(lastRow + 1, 15, numRows, 5).clearContent().clearNote();
+    // 3. Garante O:S em branco para novas linhas.
+    sheet.getRange(startRow, 15, numRows, 5).clearContent().clearNote();
 
-    // 4. Grava checkboxes na coluna I.
-    sheet.getRange(lastRow + 1, 9, numRows, 1).setDataValidations(statusValidations);
+    // 4. Checkboxes/status.
+    sheet.getRange(startRow, 9, numRows, 1).setDataValidations(statusValidations);
 
-    // 5. Bordas em A:S para reforçar visualmente a linha inteira.
-    sheet.getRange(lastRow + 1, 1, numRows, 19)
+    // 5. Bordas A:S para reforçar a linha inteira.
+    sheet.getRange(startRow, 1, numRows, 19)
       .setBorder(true, true, true, true, true, true, "#D3D3D3", SpreadsheetApp.BorderStyle.SOLID);
 
     // 6. Validação da categoria.
@@ -150,33 +177,116 @@ function coreDatalakePersistence(payload) {
           .setHelpText("Por favor, selecione uma categoria válida da lista.")
           .build();
 
-        sheet.getRange(lastRow + 1, 6, numRows, 1).setDataValidation(rule);
+        sheet.getRange(startRow, 6, numRows, 1).setDataValidation(rule);
       }
-    } catch (e) {}
+    } catch (eCat) {
+      tx.categoryValidationWarning = eCat.message;
+    }
 
-    // 7. Ordenação segura.
-    // ANTES: ordenava A:N.
-    // AGORA: recalcula helpers e ordena A:S; se o sorter não existir, fallback ordena A:S.
+    SpreadsheetApp.flush();
+
+    // 7. Verificação 1: o bloco recém-gravado precisa estar preenchido.
+    tx.writeVerified = GFP_DATALAKE_VERIFY_INSERT_BLOCK_16_1_18_(sheet, startRow, newRows);
+
+    if (!tx.writeVerified.ok) {
+      throw new Error("Persistência não verificada no bloco recém-gravado: " + JSON.stringify(tx.writeVerified));
+    }
+
+    // A partir daqui, os dados existem. Se o sort falhar, NÃO deletamos as linhas válidas.
+    canRollbackAppendBlock = false;
+
+    // 8. Ordenação A:S defensiva.
     try {
-      GFP_DATALAKE_sortWorkAS_16_1_12_(sheet);
+      if (typeof GFP_DATALAKE_sortWorkAS_16_1_12_ === "function") {
+        tx.sort = GFP_DATALAKE_sortWorkAS_16_1_12_(sheet);
+      } else {
+        tx.sort = GFP_DATALAKE_SORT_AS_FALLBACK_16_1_18_(sheet);
+      }
     } catch (eSort) {
-      Logger.log("[GFP 16.1.12] Falha na ordenação A:S pós-importação: " + eSort.message);
+      tx.sortWarning = eSort.message;
+      Logger.log("[GFP 16.1.18] Ordenação pós-gravação falhou, mas as linhas foram gravadas e verificadas: " + eSort.message);
+    }
+
+    SpreadsheetApp.flush();
+
+    // 9. Verificação 2: depois da ordenação, os IDs/HASH precisam continuar existindo em algum lugar da DB.
+    tx.postSortVerified = GFP_DATALAKE_VERIFY_IDS_EXIST_ANYWHERE_16_1_18_(sheet, newRows);
+
+    if (!tx.postSortVerified.ok) {
+      throw new Error("Persistência perdeu IDs/HASH após ordenação: " + JSON.stringify(tx.postSortVerified));
+    }
+
+    // 10. Filtro.
+    try {
+      if (sheet.getFilter()) sheet.getFilter().remove();
+      sheet.getRange(1, 1, Math.max(1, sheet.getLastRow()), 19).createFilter();
+    } catch (eFilter) {
+      tx.filterWarning = eFilter.message;
     }
 
     payload.meta.coreDatalake = {
       rowsInserted: newRows.length,
-      fullRowPolicy: "A:S_INDIVISIVEL_16_1_12"
+      persistence: "VERIFICADA_16_1_18",
+      fullRowPolicy: "A:S_INDIVISIVEL",
+      transaction: tx
     };
 
-    try {
-      if (sheet.getFilter()) sheet.getFilter().remove();
-      sheet.getRange(1, 1, Math.max(1, sheet.getLastRow()), 19).createFilter();
-    } catch (eFilter) {}
-  }
+    Logger.log("[SUCCESS][VERIFICADO] " + newRows.length + " linhas gravadas em DB_TRANSACOES.", functionName);
 
-  Logger.log(`[SUCCESS] ${newRows.length} linhas gravadas.`, functionName);
-  return payload;
+    try {
+      if (typeof GFP_LOG_16_1_13_ === "function") {
+        GFP_LOG_16_1_13_(
+          "[SUCCESS][VERIFICADO] " + newRows.length + " linhas gravadas em DB_TRANSACOES.",
+          "Importação",
+          "OK",
+          "Persistência 16.1.18"
+        );
+      }
+    } catch (eLog) {}
+
+    return payload;
+
+  } catch (e) {
+    tx.error = e.message;
+
+    if (canRollbackAppendBlock) {
+      try {
+        tx.rollback = GFP_DATALAKE_ROLLBACK_APPEND_BLOCK_16_1_18_(sheet, startRow, numRows, beforeMaxRows);
+      } catch (eRollback) {
+        tx.rollback = { ok: false, error: eRollback.message };
+      }
+    } else {
+      tx.rollback = {
+        ok: false,
+        skipped: true,
+        reason: "Dados já haviam sido verificados; rollback automático seria inseguro."
+      };
+    }
+
+    payload.meta.coreDatalake = {
+      rowsInserted: 0,
+      persistence: "FALHOU_16_1_18",
+      fullRowPolicy: "A:S_INDIVISIVEL",
+      transaction: tx
+    };
+
+    Logger.log("[ERRO][PERSISTENCIA_NAO_VERIFICADA] " + e.message, functionName);
+
+    try {
+      if (typeof GFP_LOG_16_1_13_ === "function") {
+        GFP_LOG_16_1_13_(
+          "[ERRO][PERSISTENCIA_NAO_VERIFICADA] " + e.message,
+          "Importação",
+          "WARN",
+          "Persistência 16.1.18"
+        );
+      }
+    } catch (eLog2) {}
+
+    throw new Error("GFP 16.1.18 — Persistência não verificada. A importação foi bloqueada para evitar linhas vazias/falso sucesso. Detalhe: " + e.message);
+  }
 }
+
 
 
 /**
@@ -4966,4 +5076,192 @@ function GFP_LOG_16_1_13_(message, area, type, obs) {
 
 function GFP_APLICAR_MIGRACAO_CATEGORIAS_LEGADAS_16_1_13() {
   return GFP_MIGRAR_CATEGORIAS_LEGADAS_16_1_13(false);
+}
+
+/**
+ * =============================================================================
+ * GFP 16.1.18 — AUXILIARES DE PERSISTÊNCIA VERIFICADA
+ * =============================================================================
+ */
+
+
+function GFP_DATALAKE_VERIFY_INSERT_BLOCK_16_1_18_(sheet, startRow, expectedRows) {
+  const numRows = expectedRows.length;
+  const actual = sheet.getRange(startRow, 1, numRows, 14).getValues();
+
+  const missing = [];
+  const mismatches = [];
+
+  for (let i = 0; i < expectedRows.length; i++) {
+    const expectedId = String(expectedRows[i][10] || "").trim();
+    const expectedHash = String(expectedRows[i][12] || "").trim();
+
+    const actualId = String(actual[i][10] || "").trim();
+    const actualHash = String(actual[i][12] || "").trim();
+
+    const visibleAny = actual[i].some(function(v) {
+      return v !== "" && v !== null && v !== undefined;
+    });
+
+    if (!visibleAny) {
+      missing.push({
+        row: startRow + i,
+        expectedId: expectedId
+      });
+      continue;
+    }
+
+    if (expectedId !== actualId || expectedHash !== actualHash) {
+      mismatches.push({
+        row: startRow + i,
+        expectedId: expectedId,
+        actualId: actualId,
+        expectedHash: expectedHash,
+        actualHash: actualHash
+      });
+    }
+  }
+
+  return {
+    ok: missing.length === 0 && mismatches.length === 0,
+    checked: numRows,
+    missing: missing,
+    mismatches: mismatches
+  };
+}
+
+
+function GFP_DATALAKE_VERIFY_IDS_EXIST_ANYWHERE_16_1_18_(sheet, expectedRows) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return {
+      ok: false,
+      reason: "DB_TRANSACOES vazia após gravação.",
+      missingIds: expectedRows.map(function(r) { return r[10]; }).slice(0, 20)
+    };
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+
+  const foundIds = {};
+  const foundHashes = {};
+
+  values.forEach(function(row) {
+    const id = String(row[10] || "").trim();
+    const hash = String(row[12] || "").trim();
+
+    if (id) foundIds[id] = true;
+    if (hash) foundHashes[hash] = true;
+  });
+
+  const missing = [];
+
+  expectedRows.forEach(function(row) {
+    const id = String(row[10] || "").trim();
+    const hash = String(row[12] || "").trim();
+
+    if (!foundIds[id] || !foundHashes[hash]) {
+      missing.push({
+        id: id,
+        hash: hash,
+        foundId: !!foundIds[id],
+        foundHash: !!foundHashes[hash]
+      });
+    }
+  });
+
+  return {
+    ok: missing.length === 0,
+    checked: expectedRows.length,
+    missing: missing.slice(0, 30),
+    missingCount: missing.length
+  };
+}
+
+
+function GFP_DATALAKE_ROLLBACK_APPEND_BLOCK_16_1_18_(sheet, startRow, numRows, beforeMaxRows) {
+  const out = {
+    ok: true,
+    cleared: false,
+    deletedExtraRows: 0,
+    startRow: startRow,
+    numRows: numRows,
+    beforeMaxRows: beforeMaxRows,
+    afterMaxRows: sheet.getMaxRows()
+  };
+
+  // Limpa qualquer conteúdo/validação/nota/borda gerada no bloco esperado.
+  try {
+    const safeRows = Math.min(numRows, Math.max(0, sheet.getMaxRows() - startRow + 1));
+    if (safeRows > 0) {
+      sheet.getRange(startRow, 1, safeRows, Math.min(19, sheet.getMaxColumns()))
+        .clearContent()
+        .clearDataValidations()
+        .clearNote()
+        .setBackground(null);
+      out.cleared = true;
+    }
+  } catch (eClear) {
+    out.clearError = eClear.message;
+    out.ok = false;
+  }
+
+  // Se a tentativa de gravação expandiu fisicamente a planilha, remove apenas o excedente.
+  try {
+    const currentMax = sheet.getMaxRows();
+
+    if (currentMax > beforeMaxRows) {
+      sheet.deleteRows(beforeMaxRows + 1, currentMax - beforeMaxRows);
+      out.deletedExtraRows = currentMax - beforeMaxRows;
+    }
+  } catch (eDelete) {
+    out.deleteError = eDelete.message;
+    out.ok = false;
+  }
+
+  return out;
+}
+
+
+function GFP_DATALAKE_ENSURE_WORK_AS_FALLBACK_16_1_18_(sheet) {
+  const requiredCols = 19;
+
+  if (sheet.getMaxColumns() < requiredCols) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), requiredCols - sheet.getMaxColumns());
+  }
+
+  const headers = [
+    "SYS_SORT_GRUPO",
+    "SYS_SORT_CONFIANCA",
+    "SYS_SORT_DATA",
+    "SYS_SORT_STATUS",
+    "SYS_SORT_AUDIT"
+  ];
+
+  sheet.getRange(1, 15, 1, 5).setValues([headers]);
+}
+
+
+function GFP_DATALAKE_SORT_AS_FALLBACK_16_1_18_(sheet) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 3) {
+    return {
+      sorted: false,
+      reason: "poucas linhas"
+    };
+  }
+
+  sheet.getRange(2, 1, lastRow - 1, 19)
+    .sort([
+      { column: 5, ascending: true },
+      { column: 1, ascending: false }
+    ]);
+
+  return {
+    sorted: true,
+    mode: "fallback_A:S_16_1_18",
+    rows: lastRow - 1
+  };
 }
