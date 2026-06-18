@@ -95,12 +95,12 @@ function executarTreinamento(e, description, category, originInfo) {
       trainMemory(description, category, originInfo);
     }
 
-    // 2. FEEDBACK VISUAL (Toast)
+    // 2. FEEDBACK VISUAL
     let msgToast = (originInfo === "VALIDACAO_CHECKBOX")
-      ? "✅ Confirmado e Ajustado"
-      : "🧠 Aprendido e Ajustado";
+      ? "✅ Confirmado e ajustado"
+      : "🧠 Aprendido e ajustado";
 
-    // 3. LIMPEZA VISUAL (Remove o Amarelo da Categoria)
+    // 3. LIMPEZA VISUAL
     sheet.getRange(row, 6).setBackground(null);
 
     // 4. GARANTIA DE STATUS NA EDIÇÃO MANUAL DE CATEGORIA
@@ -117,21 +117,46 @@ function executarTreinamento(e, description, category, originInfo) {
       msgToast += ` (Tipo definido para: ${novoTipo})`;
     }
 
-    e.source.toast(msgToast, "GFMB Controller");
+    // 6. REGRA GFP 16.1.18.1:
+    // NÃO ordenar automaticamente.
+    // NÃO arquivar automaticamente.
+    // A linha fica na DB_TRANSACOES até André clicar em "Arquivar Linhas OK".
+    try {
+      const metaCell = sheet.getRange(row, 14);
+      const metaRaw = String(metaCell.getValue() || "");
+      let meta = {};
 
-    // 6. 📦 GFP 15.3 — ARQUIVAMENTO AUTOMÁTICO APÓS VALIDAÇÃO OK
-    // Fica DENTRO do try, para só arquivar se o processamento anterior deu certo.
-    if (typeof GFP_AUTO_ARQUIVAR_LINHA_OK_15_3 === 'function') {
-      GFP_AUTO_ARQUIVAR_LINHA_OK_15_3(sheet, row, {
-        source: originInfo || "CHECKBOX_OK_EXECUTAR_TREINAMENTO",
-        silentToast: false
-      });
+      try {
+        meta = metaRaw ? JSON.parse(metaRaw) : {};
+      } catch (eMetaParse) {
+        meta = {};
+      }
+
+      if (!meta.manualValidation) meta.manualValidation = {};
+
+      meta.manualValidation.lastOnEditAt = new Date().toISOString();
+      meta.manualValidation.origin = originInfo || "";
+      meta.manualValidation.patch = "16.1.18.1";
+      meta.manualValidation.autoSort = false;
+      meta.manualValidation.autoArchive = false;
+
+      metaCell.setValue(JSON.stringify(meta));
+    } catch (eMeta) {
+      console.warn("[GFP 16.1.18.1] Falha ao registrar manualValidation: " + eMeta.message);
     }
+
+    e.source.toast(
+      msgToast + " — ficará na mesa até Arquivar Linhas OK.",
+      "GFP 16.1.18.1",
+      8
+    );
 
   } catch (err) {
     console.error(`❌ ERRO CRÍTICO no Trigger: ` + err.message);
   }
 }
+
+
 
 /**
  * 🕵️‍♀️ ANALISADOR DE TIPO DE TRANSAÇÃO — GFP 15.4.1

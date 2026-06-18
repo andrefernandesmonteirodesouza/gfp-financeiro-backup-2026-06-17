@@ -418,8 +418,10 @@ function GFP_PANEL_V2_buildItem_(row, cellNote, rowNumber) {
   const cp = meta && meta.classificationParams ? meta.classificationParams : {};
 
   const source = GFP_PANEL_V2_detectSource_(statusUpper, notas, cp);
-  const faixa = GFP_PANEL_V2_detectFaixa_(statusUpper, notas, cp);
-  const confidence = GFP_PANEL_V2_detectConfidence_(notas, cp);
+  const confidence = GFP_PANEL_V2_detectConfidence_16_1_18_2_(notas, cp);
+  const faixa = GFP_PANEL_V2_detectFaixa_16_1_18_2_(statusUpper, notas, cp, confidence);
+  const effectiveStatus = GFP_PANEL_V2_effectiveStatus_16_1_18_2_(statusUpper, source, faixa);
+
   const suggestedCategory = String(cp.suggestedCategory || cp.finalCategory || categoria || "").trim();
   const reason = String(cp.reason || "").trim();
 
@@ -427,7 +429,7 @@ function GFP_PANEL_V2_buildItem_(row, cellNote, rowNumber) {
   const hasCategory = GFP_PANEL_V2_isCategory_(categoria);
   const generic = GFP_PANEL_V2_isGenericCategory_(categoria);
 
-  const group = GFP_PANEL_V2_group_(statusUpper, hasCategory, generic);
+  const group = GFP_PANEL_V2_group_(effectiveStatus, hasCategory, generic);
   const priority = GFP_PANEL_V2_priority_(group, confidence);
 
   return {
@@ -442,6 +444,7 @@ function GFP_PANEL_V2_buildItem_(row, cellNote, rowNumber) {
     parcAtual: parcAtual,
     parcTotal: parcTotal,
     status: status,
+    effectiveStatus: effectiveStatus,
     notas: notas,
     cellNote: String(cellNote || ""),
     idTransacao: idTransacao,
@@ -460,8 +463,9 @@ function GFP_PANEL_V2_buildItem_(row, cellNote, rowNumber) {
     group: group,
     priority: priority,
     safeToBatchApprove: !resolved && hasCategory && !generic && (
-      statusUpper.indexOf("GEMINI_") === 0 ||
-      statusUpper.indexOf("MODELO_") === 0 ||
+      effectiveStatus.indexOf("GEMINI_") === 0 ||
+      effectiveStatus.indexOf("MODELO_") === 0 ||
+      effectiveStatus === "PENDENTE_CATEGORIZADA" ||
       statusUpper === "PENDENTE_CATEGORIZADA"
     ),
     meta: {
@@ -472,6 +476,94 @@ function GFP_PANEL_V2_buildItem_(row, cellNote, rowNumber) {
     }
   };
 }
+function GFP_PANEL_V2_detectConfidence_16_1_18_2_(note, cp) {
+  const direct = Number(cp && cp.confidence);
+  if (!isNaN(direct) && direct > 0) return Math.max(0, Math.min(100, direct));
+
+  const modelScore = Number(cp && cp.modelScore);
+  if (!isNaN(modelScore) && modelScore > 0) return Math.max(0, Math.min(100, modelScore));
+
+  const n = String(note || "").toUpperCase();
+
+  const m = n.match(/(\d{1,3})%/);
+  if (m) {
+    const pct = Number(m[1]);
+    if (!isNaN(pct)) return Math.max(0, Math.min(100, pct));
+  }
+
+  if (n.indexOf("100%") >= 0) return 100;
+  if (n.indexOf("FORTE") >= 0) return 95;
+  if (n.indexOf("MÉDIO") >= 0 || n.indexOf("MEDIO") >= 0 || n.indexOf("MEDIA") >= 0 || n.indexOf("MÉDIA") >= 0) return 85;
+  if (n.indexOf("FRACO") >= 0 || n.indexOf("FRACA") >= 0) return 65;
+
+  return "";
+}
+
+
+function GFP_PANEL_V2_detectFaixa_16_1_18_2_(statusUpper, note, cp, confidence) {
+  const cpFaixa = String(cp && cp.faixa || "").toUpperCase();
+  const n = String(note || "").toUpperCase();
+  const s = String(statusUpper || "").toUpperCase();
+
+  // Ordem proposital:
+  // 1) faixa explícita do metadata;
+  // 2) texto visível/nota;
+  // 3) status;
+  // 4) confiança numérica.
+  const rawPrimary = cpFaixa || "";
+
+  if (rawPrimary.indexOf("BLOQUE") >= 0) return "BLOQUEADO";
+  if (rawPrimary.indexOf("FORTE") >= 0) return "FORTE";
+  if (rawPrimary.indexOf("MEDIO") >= 0 || rawPrimary.indexOf("MÉDIO") >= 0 || rawPrimary.indexOf("MEDIA") >= 0 || rawPrimary.indexOf("MÉDIA") >= 0) return "MÉDIO";
+  if (rawPrimary.indexOf("FRACO") >= 0 || rawPrimary.indexOf("FRACA") >= 0) return "FRACO";
+  if (rawPrimary.indexOf("BAIXO") >= 0 || rawPrimary.indexOf("BAIXA") >= 0) return "BAIXO";
+
+  if (n.indexOf("BLOQUE") >= 0) return "BLOQUEADO";
+  if (n.indexOf("FORTE") >= 0) return "FORTE";
+  if (n.indexOf("MEDIO") >= 0 || n.indexOf("MÉDIO") >= 0 || n.indexOf("MEDIA") >= 0 || n.indexOf("MÉDIA") >= 0) return "MÉDIO";
+  if (n.indexOf("FRACO") >= 0 || n.indexOf("FRACA") >= 0) return "FRACO";
+  if (n.indexOf("BAIXO") >= 0 || n.indexOf("BAIXA") >= 0) return "BAIXO";
+
+  if (s.indexOf("FORTE") >= 0) return "FORTE";
+  if (s.indexOf("MEDIO") >= 0 || s.indexOf("MÉDIO") >= 0) return "MÉDIO";
+  if (s.indexOf("FRACO") >= 0) return "FRACO";
+  if (s.indexOf("BAIXO") >= 0) return "BAIXO";
+
+  const c = Number(confidence || 0);
+  if (c >= 95) return "FORTE";
+  if (c >= 80) return "MÉDIO";
+  if (c > 0) return "FRACO";
+
+  return "";
+}
+
+
+function GFP_PANEL_V2_effectiveStatus_16_1_18_2_(statusUpper, source, faixa) {
+  const s = String(statusUpper || "").toUpperCase();
+
+  if (GFP_PANEL_V2_isResolvedStatus_(s)) return s;
+  if (s === "PENDENTE_CATEGORIZADA") return s;
+  if (s.indexOf("BLOQUE") >= 0) return s;
+
+  const src = String(source || "").toUpperCase();
+  const f = String(faixa || "").toUpperCase();
+
+  const prefix = src.indexOf("MODELO") >= 0 ? "MODELO" :
+                 src.indexOf("GEMINI") >= 0 ? "GEMINI" :
+                 s.indexOf("MODELO_") === 0 ? "MODELO" :
+                 s.indexOf("GEMINI_") === 0 ? "GEMINI" :
+                 "";
+
+  if (!prefix) return s || "PENDENTE_CATEGORIZADA";
+
+  if (f.indexOf("FORTE") >= 0) return prefix + "_FORTE";
+  if (f.indexOf("MEDIO") >= 0 || f.indexOf("MÉDIO") >= 0) return prefix + "_MEDIO";
+  if (f.indexOf("FRACO") >= 0) return prefix + "_FRACO";
+  if (f.indexOf("BAIXO") >= 0) return prefix + "_BAIXO";
+
+  return s || prefix + "_FRACO";
+}
+
 
 function GFP_PANEL_V2_emptyStats_() {
   return {
@@ -505,20 +597,23 @@ function GFP_PANEL_V2_accumulateStats_(stats, item) {
   if (item.safeToBatchApprove) stats.readyBatch++;
   if (item.genericCategory) stats.generic++;
 
-  const s = String(item.status || "").toUpperCase();
+  const source = String(item.source || "").toUpperCase();
+  const group = String(item.group || "").toUpperCase();
 
-  if (s === "GEMINI_FORTE") stats.geminiForte++;
-  if (s === "GEMINI_MEDIO" || s === "GEMINI_MÉDIO") stats.geminiMedio++;
-  if (s === "GEMINI_FRACO") stats.geminiFraco++;
-  if (s === "GEMINI_BAIXO") stats.geminiBaixo++;
+  if (source === "GEMINI" && group === "FORTE") stats.geminiForte++;
+  if (source === "GEMINI" && group === "MEDIO") stats.geminiMedio++;
+  if (source === "GEMINI" && group === "FRACO") stats.geminiFraco++;
+  if (source === "GEMINI" && group === "BAIXO") stats.geminiBaixo++;
 
-  if (s === "MODELO_FORTE") stats.modeloForte++;
-  if (s === "MODELO_MEDIO" || s === "MODELO_MÉDIO") stats.modeloMedio++;
-  if (s === "MODELO_FRACO") stats.modeloFraco++;
-  if (s === "MODELO_BAIXO") stats.modeloBaixo++;
+  if (source === "MODELO" && group === "FORTE") stats.modeloForte++;
+  if (source === "MODELO" && group === "MEDIO") stats.modeloMedio++;
+  if (source === "MODELO" && group === "FRACO") stats.modeloFraco++;
+  if (source === "MODELO" && group === "BAIXO") stats.modeloBaixo++;
 
+  const s = String(item.effectiveStatus || item.status || "").toUpperCase();
   if (s === "PENDENTE_CATEGORIZADA") stats.pendenteCategorizada++;
 }
+
 
 function GFP_PANEL_V2_loadCategories_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

@@ -800,16 +800,66 @@ function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
       description: "Simula troca de categorias antigas por novas. Não altera dados.",
       tags: ["categorias", "simulação"]
     },
+ {
+      id: "inteligencia_status",
+      title: "Status da inteligência",
+      fn: "GFP_INTELIGENCIA_STATUS_16_1_18_4",
+      risk: "GREEN",
+      group: "Inteligência",
+      backup: false,
+      description: "Mostra se Modelo antes do Gemini, Gemini e cota de Re-Gemini estão configurados.",
+      tags: ["modelo", "gemini", "status"]
+    },
+    {
+      id: "ativar_modelo_antes_gemini",
+      title: "Ativar modelo antes do Gemini",
+      fn: "GFP_ATIVAR_MODELO_ANTES_GEMINI_16_1_18_4",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: false,
+      description: "Liga o modelo interno como primeira tentativa antes do Gemini nas próximas importações/repescagens.",
+      tags: ["modelo", "gemini"]
+    },
+    {
+      id: "reavaliar_modelo_interno",
+      title: "Reavaliar DB com modelo interno",
+      fn: "GFP_REAVALIAR_DB_MODELO_INTERNO_16_1_18_4",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: true,
+      description: "Reavalia linhas não OK da DB_TRANSACOES usando o modelo interno. Não chama Gemini.",
+      tags: ["modelo", "repescagem", "classificação"]
+    },
+    {
+      id: "regemini_controlado",
+      title: "Re-Gemini controlado",
+      fn: "GFP_REGEMINI_CONTROLADO_16_1_18_4",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: true,
+      description: "Reavalia poucas linhas pendentes com Gemini, respeitando cota diária e sem substituir Modelo Forte/Médio.",
+      tags: ["gemini", "cota", "repescagem"]
+    },
+    {
+      id: "repescagem_modelo_gemini",
+      title: "Repescagem: modelo + Gemini",
+      fn: "GFP_REPESCAGEM_MODELO_E_GEMINI_16_1_18_4",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: true,
+      description: "Primeiro roda modelo interno na DB; depois usa Gemini controlado em poucas pendências restantes.",
+      tags: ["modelo", "gemini", "repescagem"]
+    },
 
     {
-      id: "ordenar_as_defensivo",
-      title: "Ordenar DB_TRANSACOES com blindagem A:S",
-      fn: "GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13",
+      id: "reorganizar_mesa_sort",
+      title: "Reorganizar mesa / corrigir ordem",
+      fn: "GFP_REORGANIZAR_MESA_DB_TRANSACOES_16_1_18_3",
       risk: "YELLOW",
       group: "Organização",
       backup: true,
-      description: "Ordena a DB_TRANSACOES tratando A:S como linha indivisível e sem travar por categoria inválida.",
-      tags: ["ordenação", "A:S", "altera ordem"]
+      description: "Recalcula O:S, corrige notas visíveis incoerentes e ordena DB_TRANSACOES sem usar a coluna NOTAS como critério.",
+      tags: ["ordenação", "A:S", "notas", "mesa"]
     },
     {
       id: "reparar_metadados_selecao",
@@ -890,7 +940,28 @@ function GFP_CENTRAL_FERRAMENTAS_REGISTRY_16_1_14_() {
       backup: true,
       description: "Remove metadados de fatura indevidos em linhas que não são cartão/fatura. Use após simular.",
       tags: ["metadados", "fatura", "altera dados"]
+    },
+        {
+      id: "repescagem_inteligente",
+      title: "Repescagem inteligente",
+      fn: "GFP_MENU_REPESCAGEM_INTELIGENTE_16_1_18_4_2",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: true,
+      description: "Roda modelo interno, depois Re-Gemini controlado em até 33 linhas, e reorganiza a mesa.",
+      tags: ["modelo", "gemini", "repescagem"]
+    },
+    {
+      id: "repescar_so_modelo",
+      title: "Repescar só com modelo interno",
+      fn: "GFP_MENU_REPESCAR_SO_MODELO_INTERNO_16_1_18_4_2",
+      risk: "YELLOW",
+      group: "Inteligência",
+      backup: true,
+      description: "Reavalia DB_TRANSACOES inteira com o modelo interno, sem chamar Gemini.",
+      tags: ["modelo", "repescagem"]
     }
+    
   ];
 }
 

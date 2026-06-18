@@ -3732,30 +3732,35 @@ function GFP_DATALAKE_appendWorkRowAS_16_1_12_(work, row) {
  * - Nunca ordena A:N ou A:J.
  */
 function GFP_DATALAKE_sortWorkAS_16_1_12_(sh) {
-  if (!sh) return { sorted: false, reason: "sheet ausente" };
-
-  if (typeof GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13 === "function") {
-    return GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13();
+  if (typeof GFP_REORGANIZAR_MESA_DB_TRANSACOES_APPLY_16_1_18_3_ === "function") {
+    return GFP_REORGANIZAR_MESA_DB_TRANSACOES_APPLY_16_1_18_3_(sh, {
+      normalizeVisibleNotes: true,
+      sort: true
+    });
   }
 
   const lastRow = sh.getLastRow();
-
   if (lastRow < 3) {
     return { sorted: false, reason: "poucas linhas" };
   }
 
-  sh.getRange(2, 1, lastRow - 1, 19)
-    .sort([
-      { column: 5, ascending: true },
-      { column: 1, ascending: false }
-    ]);
+  sh.getRange(2, 1, lastRow - 1, 19).sort([
+    { column: 15, ascending: true },
+    { column: 16, ascending: true },
+    { column: 17, ascending: true },
+    { column: 5,  ascending: true },
+    { column: 2,  ascending: true },
+    { column: 3,  ascending: true }
+  ]);
 
   return {
     sorted: true,
-    rows: lastRow - 1,
-    mode: "fallback_A:S_16_1_12_wrapper"
+    mode: "fallback_A:S_16_1_18_3",
+    rows: lastRow - 1
   };
 }
+
+
 
 
 
@@ -4904,128 +4909,10 @@ function GFP_CATEGORIAS_OFICIAIS_SET_16_1_13_() {
  * inválida derrube a ordenação; depois reaplica a validação.
  */
 function GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = ss.getSheetByName("DB_TRANSACOES");
-  if (!sh) throw new Error("DB_TRANSACOES não encontrada.");
-
-  const lastRow = sh.getLastRow();
-  if (lastRow < 3) return { ok: true, sorted: false, reason: "poucas linhas" };
-
-  const out = {
-    ok: true,
-    patch: GFP_PATCH_16_1_13,
-    rows: lastRow - 1,
-    migration: null,
-    auditBefore: null,
-    auditAfter: null,
-    sort: null,
-    errors: []
-  };
-
-  try {
-    out.migration = GFP_MIGRAR_CATEGORIAS_LEGADAS_16_1_13(false);
-  } catch (eMig) {
-    out.errors.push("migração: " + eMig.message);
-  }
-
-  try {
-    out.auditBefore = GFP_AUDITAR_CATEGORIAS_INVALIDAS_16_1_13();
-  } catch (eAud1) {
-    out.errors.push("auditoria antes: " + eAud1.message);
-  }
-
-  try {
-    if (typeof GFP_DATALAKE_ensureWorkAS_16_1_12_ === "function") {
-      GFP_DATALAKE_ensureWorkAS_16_1_12_(sh);
-    }
-  } catch (eAS) {
-    out.errors.push("ensure A:S: " + eAS.message);
-  }
-
-  let categoryRule = null;
-  try {
-    categoryRule = sh.getRange(2, 6).getDataValidation();
-  } catch (eRule) {}
-
-  try {
-    sh.getRange(2, 6, lastRow - 1, 1).clearDataValidations();
-  } catch (eClear) {
-    out.errors.push("clear validação F: " + eClear.message);
-  }
-
-  try {
-    if (typeof GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3 === "function") {
-      out.sort = GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3();
-    } else {
-      sh.getRange(2, 1, lastRow - 1, 19)
-        .sort([
-          { column: 5, ascending: true },
-          { column: 1, ascending: false }
-        ]);
-
-      out.sort = { sorted: true, mode: "fallback_A:S_16_1_13", rows: lastRow - 1 };
-    }
-  } catch (eSort) {
-    out.ok = false;
-    out.errors.push("sort: " + eSort.message);
-
-    try {
-      sh.getRange(2, 1, lastRow - 1, 19)
-        .sort([
-          { column: 5, ascending: true },
-          { column: 1, ascending: false }
-        ]);
-
-      out.sortFallback = {
-        sorted: true,
-        mode: "fallback_after_error_A:S_16_1_13",
-        rows: lastRow - 1
-      };
-      out.ok = true;
-    } catch (eFallback) {
-      out.ok = false;
-      out.errors.push("fallback sort: " + eFallback.message);
-    }
-  } finally {
-    try {
-      const ruleToApply = categoryRule || GFP_CATEGORIA_VALIDATION_RULE_16_1_13_();
-      if (ruleToApply) {
-        sh.getRange(2, 6, Math.max(1, sh.getMaxRows() - 1), 1).setDataValidation(ruleToApply);
-      }
-    } catch (eReapply) {
-      out.errors.push("reaplicar validação F: " + eReapply.message);
-    }
-  }
-
-  try {
-    out.auditAfter = GFP_AUDITAR_CATEGORIAS_INVALIDAS_16_1_13();
-  } catch (eAud2) {
-    out.errors.push("auditoria depois: " + eAud2.message);
-  }
-
-  try {
-    if (typeof GFP_AUDITAR_ALINHAMENTO_METADADOS_DB_16_1_12 === "function") {
-      out.auditAS = GFP_AUDITAR_ALINHAMENTO_METADADOS_DB_16_1_12();
-    }
-  } catch (eMeta) {
-    out.errors.push("auditoria A:S: " + eMeta.message);
-  }
-
-  GFP_LOG_16_1_13_(
-    out.ok ? "Ordenação defensiva A:S concluída." : "Ordenação defensiva A:S com erro.",
-    "Ordenação",
-    out.ok ? "OK" : "WARN",
-    "Erros: " + out.errors.length
-  );
-
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    out.ok ? "Ordenação defensiva A:S concluída." : "Ordenação defensiva A:S concluída com alertas.",
-    "GFP 16.1.13",
-    8
-  );
-
-  return out;
+  return GFP_REORGANIZAR_MESA_DB_TRANSACOES_16_1_18_3();
 }
+
+
 
 function GFP_CATEGORIA_VALIDATION_RULE_16_1_13_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

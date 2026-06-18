@@ -332,10 +332,20 @@ function GFP_SORT_DISABLE_AUTO_AFTER_APPROVAL_14_3() {
  */
 function GFP_SORT_MAYBE_AUTO_AFTER_APPROVAL_14_3() {
   const enabled = String(
-    PropertiesService.getScriptProperties().getProperty("GFP_SORT_AUTO_AFTER_APPROVAL_14_3") || "TRUE"
-  ).toUpperCase() !== "FALSE";
+    PropertiesService.getScriptProperties().getProperty("GFP_SORT_AUTO_AFTER_APPROVAL_14_3") || "FALSE"
+  ).toUpperCase() === "TRUE";
 
-  if (!enabled) return { skipped: true, reason: "auto sort disabled" };
+  if (!enabled) {
+    return {
+      skipped: true,
+      reason: "auto sort after checkbox/manual approval disabled by GFP 16.1.18.1"
+    };
+  }
+
+  if (typeof GFP_SORT_DB_TRANSACOES_OFICIAL_16_1_18_1 === "function") {
+    return GFP_SORT_DB_TRANSACOES_OFICIAL_16_1_18_1();
+  }
 
   return GFP_SORT_DB_TRANSACOES_REVISAO_INTELIGENTE_14_3();
 }
+

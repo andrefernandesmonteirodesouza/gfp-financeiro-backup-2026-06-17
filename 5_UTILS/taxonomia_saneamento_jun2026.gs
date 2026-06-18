@@ -502,25 +502,25 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "MCDONALD",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café"
+        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
       ]
     },
     {
       key: "MEGAMATTE",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café"
+        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
       ]
     },
     {
       key: "DELIRIO TROPICAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café"
+        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
       ]
     },
     {
       key: "DELÍRIO TROPICAL",
       categoryCandidates: [
-        "02.02 — Despesas — Alimentação — Restaurante / Lanchonete / Café"
+        "02.02 — Despesas — Alimentação — Lanchonete / Café / Refeições"
       ]
     },
 
@@ -578,7 +578,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGARIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -586,7 +586,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "FARMACIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -594,7 +594,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "FARMÁCIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -602,7 +602,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGARIA VENANCIO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -610,7 +610,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "VENANCIO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -618,7 +618,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGASIL",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -626,7 +626,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "DROGA RAIA",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -634,7 +634,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PACHECO",
       categoryCandidates: [
-        "02.04 — Despesas — Saúde — Farmácia / Medicamentos",
+        "02.04 — Despesas — Saúde — Farmácia / Remédios",
         "Farmácia",
         "Medicamentos"
       ]
@@ -709,7 +709,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PET CENTER",
       categoryCandidates: [
-        "02.06 — Despesas — Pets — Alimentação / Veterinário / Banho e Tosa",
+        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
         "Pet",
         "Pets"
       ]
@@ -717,7 +717,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "PETZ",
       categoryCandidates: [
-        "02.06 — Despesas — Pets — Alimentação / Veterinário / Banho e Tosa",
+        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
         "Pet",
         "Pets"
       ]
@@ -725,7 +725,7 @@ function GFP_getPlannedTaxonomyRules_() {
     {
       key: "COBASI",
       categoryCandidates: [
-        "02.06 — Despesas — Pets — Alimentação / Veterinário / Banho e Tosa",
+        "02.10 — Despesas — Pets (Leozinho) — Ração / Petiscos",
         "Pet",
         "Pets"
       ]

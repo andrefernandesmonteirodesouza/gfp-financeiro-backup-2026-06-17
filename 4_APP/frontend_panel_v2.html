@@ -612,9 +612,8 @@
 
       <div class="actions-top">
         <button class="primary" onclick="loadData()">Filtrar</button>
-        <button class="success" onclick="batchApprove()">Salvar seleção</button>
-        <button class="purple" onclick="finalizeSession()">Finalizar</button>
-        <button class="danger" onclick="clearQueue()">Limpar fila</button>
+        <button class="success" onclick="batchApprove()">Aplicar decisões</button>
+        <button class="danger" onclick="clearQueue()">Limpar seleção</button>
         <button class="primary" onclick="loadData()">Atualizar</button>
       </div>
     </div>
@@ -1065,15 +1064,6 @@
       `;
     }
 
-    function queueAction(action) {
-      const row = Number(action.row || 0);
-      if (!row) return;
-
-      STATE.queue = STATE.queue.filter(a => Number(a.row) !== row);
-      STATE.queue.push(action);
-      saveQueue();
-      setStatus(`Decisão na fila temporária. Nada foi gravado ainda.`);
-    }
 
     function loadQueue() {
       // Fila temporária da sessão visual atual.
@@ -1084,17 +1074,7 @@
       return [];
     }
 
-    function saveQueue() {
-      // Mantém somente em memória enquanto o painel está aberto.
-      renderStatsFromCurrent();
-    }
 
-    function clearQueue() {
-      STATE.queue = [];
-      saveQueue();
-      setStatus("Fila temporária limpa.");
-      loadData();
-    }
 
     function prepareCategoryEdit(event, row) {
       if (event) event.stopPropagation();
@@ -1208,24 +1188,6 @@
       return document.querySelectorAll(".rowcheck:checked").length;
     }
 
-    function renderStatsFromCurrent() {
-      const statsEl = document.getElementById("stats");
-      if (!statsEl) return;
-
-      const remaining = document.querySelectorAll(".item").length;
-      const enabled = Array.from(document.querySelectorAll(".rowcheck:not(:disabled)"));
-      const allChecked = enabled.length > 0 && enabled.every(b => b.checked);
-
-      statsEl.innerHTML = `
-        <span class="pill">Pendentes: <strong>${remaining}</strong></span>
-        <span class="pill">Selecionados: <strong>${countSelected()}</strong></span>
-        <span class="pill queue-pill">Fila: <strong>${STATE.queue.length}</strong></span>
-        <label class="pill pill-check">
-          <input type="checkbox" id="selectAllMini" onclick="toggleAllFromHeader(this)" ${allChecked ? "checked" : ""}>
-          Tudo
-        </label>
-      `;
-    }
 
     function installKeyboardShortcuts() {
       document.addEventListener("keydown", function(event) {
@@ -1355,75 +1317,12 @@
       focusItem(row, true);
     }
 
-    function approveRow(row) {
-      const category = getCategoryForApprove(row);
-
-      queueAction({
-        action: "APPROVE",
-        row: Number(row),
-        category: category,
-        queuedAt: new Date().toISOString()
-      });
-
-      removeItem(row);
-      setStatus(`Linha ${row} salva na fila temporária.`);
-    }
-
-    function batchApprove() {
-      const rows = Array.from(document.querySelectorAll(".rowcheck:checked"))
-        .map(el => Number(el.value))
-        .filter(Boolean);
-
-      if (!rows.length) {
-        setStatus("Selecione ao menos uma linha.");
-        return;
-      }
-
-      rows.forEach(row => {
-        const category = getCategoryForApprove(row);
-
-        queueAction({
-          action: "APPROVE",
-          row: Number(row),
-          category: category,
-          queuedAt: new Date().toISOString()
-        });
-      });
-
-      removeItems(rows);
-      setStatus(`${rows.length} linha(s) salvas na fila temporária.`);
-    }
 
     function skipRow(row) {
       removeItem(row);
       setStatus(`Linha ${row} pulada. Nada foi gravado.`);
     }
 
-    function finalizeSession() {
-      const actions = STATE.queue || [];
-
-      if (!actions.length) {
-        setStatus("Não há decisões na fila.");
-        return;
-      }
-
-      setBusy(true);
-      setStatus(`Finalizando ${actions.length} decisão(ões)...`);
-
-      google.script.run
-        .withSuccessHandler(result => {
-          STATE.queue = [];
-          saveQueue();
-          setBusy(false);
-          setStatus(`Finalizado: ${result.committed || 0} gravada(s), ${result.skipped || 0} ignorada(s).`);
-          loadData();
-        })
-        .withFailureHandler(err => {
-          setBusy(false);
-          setStatus("Erro: " + getErrorMessage(err));
-        })
-        .apiReviewPanelV2CommitSession_14_9_6({ actions: actions });
-    }
 
     function removeItem(row) {
       const el = document.getElementById(`item-${row}`);
@@ -1455,12 +1354,6 @@
       }, 120);
     }
 
-    function updateLocalStatusAfterRemoval() {
-      const remaining = document.querySelectorAll(".item").length;
-      if (!remaining) {
-        document.getElementById("list").innerHTML = `<div class="empty">Nenhuma pendência restante neste filtro. Finalize para gravar a fila temporária.</div>`;
-      }
-    }
 
     function clearFilters() {
       document.getElementById("query").value = "";
@@ -1495,6 +1388,184 @@
     function escapeAttr(value) {
       return escapeHtml(value).replace(/`/g, "&#096;");
     }
+
+    /**
+     * =============================================================================
+     * GFP 16.1.18.2 — OVERRIDE FRONTEND PAINEL TURBO
+     * =============================================================================
+     * Um botão: Aplicar decisões.
+     * Sem fila temporária persistente.
+     * Sem Finalizar.
+     * =============================================================================
+     */
+
+(function GFP_PANEL_V2_TURBO_UI_BOOT_16_1_18_2() {
+  try {
+    setTimeout(function() {
+      const buttons = Array.from(document.querySelectorAll("button"));
+
+      buttons.forEach(function(btn) {
+        const txt = String(btn.textContent || "").trim().toLowerCase();
+
+        if (txt === "salvar seleção") {
+          btn.textContent = "Aplicar decisões";
+          btn.onclick = batchApprove;
+        }
+
+        if (txt === "finalizar") {
+          btn.style.display = "none";
+        }
+
+        if (txt === "limpar fila") {
+          btn.textContent = "Limpar seleção";
+          btn.onclick = clearQueue;
+        }
+      });
+    }, 0);
+  } catch (e) {}
+})();
+
+
+function queueAction(action) {
+  // Mantido por compatibilidade, mas o modo 16.1.18.2 não usa fila persistente.
+  const row = Number(action && action.row || 0);
+  if (!row) return;
+
+  STATE.queue = STATE.queue.filter(function(a) {
+    return Number(a.row) !== row;
+  });
+
+  STATE.queue.push(action);
+  saveQueue();
+}
+
+
+function saveQueue() {
+  renderStatsFromCurrent();
+}
+
+
+function clearQueue() {
+  STATE.queue = [];
+  saveQueue();
+
+  Array.from(document.querySelectorAll(".rowcheck")).forEach(function(box) {
+    box.checked = false;
+  });
+
+  updateSelectedVisuals();
+  setStatus("Seleção limpa.");
+}
+
+
+function renderStatsFromCurrent() {
+  const statsEl = document.getElementById("stats");
+  if (!statsEl) return;
+
+  const remaining = document.querySelectorAll(".item").length;
+  const enabled = Array.from(document.querySelectorAll(".rowcheck:not(:disabled)"));
+  const allChecked = enabled.length > 0 && enabled.every(function(b) { return b.checked; });
+
+  statsEl.innerHTML = `
+    <span class="pill">Pendentes: <strong>${remaining}</strong></span>
+    <span class="pill">Selecionados: <strong>${countSelected()}</strong></span>
+    <label class="pill pill-check">
+      <input type="checkbox" id="selectAllMini" onclick="toggleAllFromHeader(this)" ${allChecked ? "checked" : ""}>
+      Tudo
+    </label>
+  `;
+}
+
+
+function approveRow(row) {
+  const category = getCategoryForApprove(row);
+
+  const action = {
+    action: "APPROVE",
+    row: Number(row),
+    category: category,
+    queuedAt: new Date().toISOString()
+  };
+
+  applyReviewActions_16_1_18_2([action], [Number(row)]);
+}
+
+
+function batchApprove() {
+  const rows = Array.from(document.querySelectorAll(".rowcheck:checked"))
+    .map(function(el) { return Number(el.value); })
+    .filter(Boolean);
+
+  if (!rows.length) {
+    setStatus("Selecione ao menos uma linha.");
+    return;
+  }
+
+  const actions = rows.map(function(row) {
+    return {
+      action: "APPROVE",
+      row: Number(row),
+      category: getCategoryForApprove(row),
+      queuedAt: new Date().toISOString()
+    };
+  });
+
+  applyReviewActions_16_1_18_2(actions, rows);
+}
+
+
+function finalizeSession() {
+  // Compatibilidade com atalho antigo.
+  // Agora Finalizar = Aplicar decisões selecionadas.
+  batchApprove();
+}
+
+
+function applyReviewActions_16_1_18_2(actions, rowsToRemove) {
+  if (!actions || !actions.length) {
+    setStatus("Nenhuma decisão para aplicar.");
+    return;
+  }
+
+  setBusy(true);
+  setStatus(`Aplicando ${actions.length} decisão(ões)...`);
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      setBusy(false);
+
+      const committed = Number(result && result.committed || 0);
+      const skipped = Number(result && result.skipped || 0);
+
+      if (committed > 0) {
+        removeItems(rowsToRemove || []);
+      }
+
+      STATE.queue = [];
+      saveQueue();
+
+      setStatus(
+        `Aplicado: ${committed} decisão(ões). Ignoradas: ${skipped}. ` +
+        `As linhas OK permanecem na DB_TRANSACOES até Arquivar Linhas OK.`
+      );
+    })
+    .withFailureHandler(function(err) {
+      setBusy(false);
+      setStatus("Erro: " + getErrorMessage(err));
+    })
+    .apiReviewPanelV2CommitSession_14_9_6({ actions: actions });
+}
+
+
+function updateLocalStatusAfterRemoval() {
+  const remaining = document.querySelectorAll(".item").length;
+
+  if (!remaining) {
+    document.getElementById("list").innerHTML =
+      `<div class="empty">Nenhuma pendência restante neste filtro. As decisões aplicadas já foram gravadas como OK na DB_TRANSACOES.</div>`;
+  }
+}
+
   </script>
 </body>
 </html>

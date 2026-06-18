@@ -29,15 +29,32 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
   const startedAt = new Date();
 
   const out = {
-    patch: GFP_PANEL_V2_SESSION_PATCH_14_9_6,
+    patch: "16.1.18.4.2",
     requested: actions.length,
     committed: 0,
     skipped: 0,
     errors: [],
-    postProcess: null,
+    postProcess: {
+      skipped: true,
+      reason: "Painel Turbo não executa pós-processamento pesado."
+    },
+    autoArchive: {
+      skipped: true,
+      reason: "Linhas OK permanecem na DB_TRANSACOES até Arquivar Linhas OK."
+    },
+    autoArchiveMoved: 0,
+    dashboard: {
+      skipped: true,
+      reason: "Dashboard/DRE não atualizam a cada microdecisão."
+    },
+    modelLearning: null,
     startedAt: startedAt.toISOString(),
     finishedAt: null
   };
+
+  // 🧠 GFP 16.1.18.4 — linhas efetivamente aplicadas no Painel,
+  // para aprendizado pontual leve do modelo interno.
+  const committedRowsForLearning = [];
 
   if (!actions.length) {
     out.finishedAt = new Date().toISOString();
@@ -47,11 +64,11 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
   const lock = LockService.getDocumentLock();
 
   if (!lock.tryLock(30000)) {
-    throw new Error("Não foi possível obter lock para finalizar a revisão. Tente novamente em alguns segundos.");
+    throw new Error("Não foi possível obter lock para aplicar decisões. Tente novamente em alguns segundos.");
   }
 
   try {
-    actions.forEach((item, idx) => {
+    actions.forEach(function(item, idx) {
       try {
         const action = String(item.action || "APPROVE").toUpperCase();
         const row = Number(item.row || 0);
@@ -67,7 +84,7 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
           return;
         }
 
-        if (action !== "APPROVE" && action !== "CORRECT") {
+        if (action !== "APPROVE" && action !== "CORRECT" && action !== "MANUAL") {
           out.skipped++;
           out.errors.push({
             index: idx,
@@ -79,25 +96,49 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
         }
 
         if (typeof apiReviewPanelV2ApproveFast !== "function") {
-          throw new Error("apiReviewPanelV2ApproveFast não encontrada. Aplique o backend turbo 14.9.2/14.9.3 antes.");
+          throw new Error("apiReviewPanelV2ApproveFast não encontrada.");
         }
 
-        const result = apiReviewPanelV2ApproveFast({
-          row: row,
-          category: category,
-          sessionCommit: true,
-          source: "PAINEL_V2_SESSION_14_9_6"
-        });
+        let result;
+
+        if (action === "MANUAL" && typeof apiReviewPanelV2MarkManualFast === "function") {
+          result = apiReviewPanelV2MarkManualFast({
+            row: row,
+            category: category,
+            sessionCommit: true,
+            source: "PAINEL_V2_TURBO_16_1_18_4_2"
+          });
+
+        } else if (action === "CORRECT" && typeof apiReviewPanelV2CorrectFast === "function") {
+          result = apiReviewPanelV2CorrectFast({
+            row: row,
+            category: category,
+            sessionCommit: true,
+            source: "PAINEL_V2_TURBO_16_1_18_4_2"
+          });
+
+        } else {
+          result = apiReviewPanelV2ApproveFast({
+            row: row,
+            category: category,
+            sessionCommit: true,
+            source: "PAINEL_V2_TURBO_16_1_18_4_2"
+          });
+        }
 
         if (result && result.ok) {
           out.committed++;
+
+          // 🧠 Linha aplicada com sucesso: entra no aprendizado pontual.
+          committedRowsForLearning.push(row);
+
         } else {
           out.skipped++;
           out.errors.push({
             index: idx,
             row: row,
             result: result || null,
-            error: "Linha ignorada no commit."
+            error: result && result.reason ? result.reason : "Linha ignorada no commit."
           });
         }
 
@@ -111,51 +152,50 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
       }
     });
 
-    // Pós-processa tudo de uma vez.
+    // 🧠 GFP 16.1.18.4 — aprendizado pontual leve.
+    // Roda uma vez no final do lote aplicado, não a cada card.
+    // Não chama Gemini.
+    // Não ordena.
+    // Não arquiva.
+    // Não atualiza Dashboard/DRE.
     try {
-      if (typeof GFP_PANEL_V2_PROCESSAR_PENDENCIAS_FAST_14_9_2 === "function") {
-        out.postProcess = GFP_PANEL_V2_PROCESSAR_PENDENCIAS_FAST_14_9_2(1000);
-      } else if (typeof apiReviewPanelV2FinalizeFastSession === "function") {
-        out.postProcess = apiReviewPanelV2FinalizeFastSession({ limit: 1000 });
+      if (
+        committedRowsForLearning.length &&
+        typeof GFP_MODELO_APRENDER_DECISOES_PAINEL_16_1_18_4 === "function"
+      ) {
+        out.modelLearning = GFP_MODELO_APRENDER_DECISOES_PAINEL_16_1_18_4(committedRowsForLearning);
       } else {
-        out.postProcess = {
+        out.modelLearning = {
           skipped: true,
-          reason: "Função de pós-processamento do Painel V2 não encontrada."
+          reason: "Nenhuma linha para aprendizado ou função 16.1.18.4 ausente."
         };
       }
-    } catch (ePost) {
-      out.errors.push({
-        stage: "postProcess",
-        error: ePost.message
-      });
+    } catch (eLearning) {
+      out.modelLearning = {
+        ok: false,
+        error: eLearning.message,
+        note: "A decisão foi aplicada; apenas o aprendizado pontual falhou."
+      };
     }
 
   } finally {
-    lock.releaseLock();
-  }
-
-  // ✅ GFP 15.6 — Pós-commit seguro do Painel de Revisão 2.0.
-  if (typeof GFP_REVIEW_PANEL_V2_AFTER_COMMIT_15_6_ === 'function') {
-    GFP_REVIEW_PANEL_V2_AFTER_COMMIT_15_6_(out, {
-      source: "PAINEL_REVISAO_2_FINALIZAR"
-    });
+    try { lock.releaseLock(); } catch (eLock) {}
   }
 
   out.finishedAt = new Date().toISOString();
 
-  Logger.log("[apiReviewPanelV2CommitSession_14_9_6] " + JSON.stringify(out));
-
-  const moved = out.autoArchive
-    ? Number(out.autoArchive.archived || 0) + Number(out.autoArchive.reactivated || 0)
-    : 0;
+  Logger.log("[apiReviewPanelV2CommitSession_16_1_18_4_2] " + JSON.stringify(out));
 
   SpreadsheetApp.getActiveSpreadsheet().toast(
-    `Painel V2: ${out.committed} decisão(ões) gravada(s), ${out.skipped} ignorada(s). Arquivadas: ${moved}.`,
-    "GFP 15.6"
+    "Painel V2 Turbo: " + out.committed + " decisão(ões) aplicada(s). Linhas OK continuam na mesa.",
+    "GFP 16.1.18.4.2",
+    8
   );
 
   return out;
 }
+
+
 /**
  * =============================================================================
  * ✅ GFP 15.6.0 — PÓS-COMMIT SEGURO DO PAINEL DE REVISÃO 2.0
@@ -176,53 +216,20 @@ function apiReviewPanelV2CommitSession_14_9_6(payload) {
  */
 
 function GFP_REVIEW_PANEL_V2_AFTER_COMMIT_15_6_(out, options) {
-  options = options || {};
   out = out || {};
-
-  out.reviewPanelFinalPatch = "15.6.0";
-
-  try {
-    if (typeof GFP_AUTO_ARQUIVAR_OKS_MESA_15_3 === "function") {
-      const archiveResult = GFP_AUTO_ARQUIVAR_OKS_MESA_15_3({
-        source: options.source || "PAINEL_REVISAO_2_FINALIZAR_15_6",
-        silentToast: true
-      });
-
-      out.autoArchive = archiveResult;
-      out.autoArchiveMoved =
-        Number(archiveResult && archiveResult.archived || 0) +
-        Number(archiveResult && archiveResult.reactivated || 0);
-    } else {
-      out.autoArchive = {
-        ok: false,
-        skipped: true,
-        reason: "Função GFP_AUTO_ARQUIVAR_OKS_MESA_15_3 não encontrada."
-      };
-      out.autoArchiveMoved = 0;
-    }
-  } catch (eArchive) {
-    out.autoArchive = {
-      ok: false,
-      error: eArchive.message,
-      stack: eArchive.stack || ""
-    };
-    out.autoArchiveMoved = 0;
-  }
-
-  try {
-    if (typeof GFP_MANTER_HIST_STATUS_VISIVEL_15_6 === "function") {
-      GFP_MANTER_HIST_STATUS_VISIVEL_15_6({ silent: true });
-    } else if (typeof GFP_MANTER_HIST_STATUS_VISIVEL_15_5 === "function") {
-      GFP_MANTER_HIST_STATUS_VISIVEL_15_5({ silent: true });
-    } else if (typeof GFP_MANTER_HIST_STATUS_VISIVEL_15_4 === "function") {
-      GFP_MANTER_HIST_STATUS_VISIVEL_15_4({ silent: true });
-    }
-  } catch (eHist) {
-    out.keepHistStatusVisibleError = eHist.message;
-  }
-
+  out.reviewPanelFinalPatch = "16.1.18.2";
+  out.autoArchive = {
+    skipped: true,
+    reason: "Autoarquivamento desativado. Use Arquivar Linhas OK."
+  };
+  out.autoArchiveMoved = 0;
+  out.keepHistStatusVisible = {
+    skipped: true,
+    reason: "Histórico não é tocado pelo Painel Turbo."
+  };
   return out;
 }
+
 
 
 /**
