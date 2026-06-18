@@ -1,8 +1,8 @@
 /**
  * 📂 ARQUIVO: 3_RULES/gemini_fallback_controlado.gs
  * 🧠 MÓDULO: GEMINI FALLBACK CONTROLADO COM FAIXA VISUAL
- * 🔢 VERSÃO: 14.1.1
- * 📅 DATA: 09/06/2026 (14.1.0) | 18/06/2026 (14.1.1)
+ * 🔢 VERSÃO: 14.1.2
+ * 📅 DATA: 09/06/2026 (14.1.0) | 18/06/2026 (14.1.1 e 14.1.2)
  * 👤 AUTOR OPERACIONAL: André Fernandes
  * -----------------------------------------------------------------------------
  * OBJETIVO:
@@ -11,15 +11,19 @@
  *
  * 📝 HISTÓRICO:
  * - 14.1.0: versão original.
- * - 14.1.1: CORREÇÃO (André + Claude, 2026-06-18) — GFP_callGeminiForCategorySuggestions_
- *   desistia na primeira falha HTTP, incluindo erros 503/429 que são tipicamente
- *   transitórios ("modelo sobrecarregado, tente novamente"). Sem retry, qualquer
- *   instabilidade momentânea do Gemini abortava a rodada inteira (Repescagem
- *   Inteligente e Re-Gemini Controlado, que reaproveitam esta mesma função).
- *   Agora há até 3 tentativas com espera progressiva (1s, 2s, 4s) somente para
- *   códigos retornáveis (429, 500, 502, 503, 504); outros códigos (ex.: 400, 401,
- *   403 — chave inválida/revogada) continuam falhando imediatamente, sem retry
- *   inútil.
+ * - 14.1.1: retry com espera progressiva para HTTP 429/500/502/503/504 em
+ *   GFP_callGeminiForCategorySuggestions_.
+ * - 14.1.2: CORREÇÃO (André + Claude, 2026-06-18) — faixas de cor de
+ *   Modelo Interno/Gemini desapareciam da DB_TRANSACOES depois de certos
+ *   fluxos. Causa: este arquivo chamava direto a função de cores ANTIGA
+ *   (..._14_1, com fórmulas OR()) em 3 pontos, enquanto outros módulos do
+ *   projeto (saneamento_visual_db_transacoes_14_5_1.gs, modelo_preclassificador_14_5.gs)
+ *   já preferem a versão corrigida (..._14_1_1, sem OR(), em visual_notes_core.gs).
+ *   setConditionalFormatRules() substitui TODO o conjunto de regras do sheet —
+ *   então sempre que este arquivo rodava depois, ele apagava as cores boas e
+ *   instalava as regras antigas (que não pintam corretamente). Nova função
+ *   GFP_APPLY_BEST_GEMINI_VISUAL_RULES_14_1_2_ centraliza a escolha (sempre
+ *   prefere a _14_1_1) e os 3 pontos agora chamam ela em vez da antiga direto.
  * -----------------------------------------------------------------------------
  * ESCALA OFICIAL:
  * 95% a 100%  → GEMINI_FORTE
@@ -48,11 +52,36 @@ const GFP_GEMINI_STATUS_BAIXO = "GEMINI_BAIXO";
 const GFP_GEMINI_STATUS_BLOQUEADO = "GEMINI_BLOQUEADO";
 
 /**
+ * 🛡️ CORREÇÃO 14.1.2 — resolve qual versão da função de cores usar.
+ *
+ * Existem duas implementações no projeto:
+ * - GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1 (esta arquivo, mais antiga,
+ *   usa fórmulas com OR()).
+ * - GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1_1 (5_UTILS/visual_notes_core.gs,
+ *   reescrita sem OR() especificamente para corrigir um problema de regras que
+ *   não pintavam as linhas).
+ *
+ * Este arquivo chamava a versão antiga direto em 3 pontos, o que sobrescrevia
+ * (setConditionalFormatRules substitui TODO o conjunto de regras do sheet) as
+ * cores corretas instaladas por outros módulos que já preferem a _14_1_1.
+ * Resultado observado: as faixas de cor de Modelo Interno/Gemini desapareciam
+ * depois de rodar qualquer fluxo que passasse por este arquivo.
+ *
+ * Esta função centraliza a escolha: sempre usa a _14_1_1 se existir.
+ */
+function GFP_APPLY_BEST_GEMINI_VISUAL_RULES_14_1_2_() {
+  if (typeof GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1_1 === "function") {
+    return GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1_1();
+  }
+  return GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1();
+}
+
+/**
  * Liga a trava do Gemini fallback controlado.
  */
 function GFP_ENABLE_GEMINI_FALLBACK_CONTROLADO() {
   PropertiesService.getScriptProperties().setProperty("GFP_ENABLE_GEMINI_FALLBACK_CONTROLADO", "TRUE");
-  GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1();
+  GFP_APPLY_BEST_GEMINI_VISUAL_RULES_14_1_2_();
 
   SpreadsheetApp.getActiveSpreadsheet().toast(
     "Gemini fallback controlado ATIVADO com faixas visuais.",
@@ -296,7 +325,7 @@ function GFP_GEMINI_FALLBACK_RUN_(limit, dryRun) {
       metaCell.setValue(JSON.stringify(meta));
     });
 
-    GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1();
+    GFP_APPLY_BEST_GEMINI_VISUAL_RULES_14_1_2_();
 
     try {
       if (typeof GFP_APLICAR_CHECKBOX_APROVACAO_GEMINI_14_2_1 === "function") {
@@ -776,7 +805,7 @@ function GFP_MIGRAR_GEMINI_SUGERIDO_PARA_FAIXAS_14_1_(dryRun) {
       metaCell.setValue(JSON.stringify(meta));
     });
 
-    GFP_APPLY_GEMINI_CONFIDENCE_VISUAL_RULES_14_1();
+    GFP_APPLY_BEST_GEMINI_VISUAL_RULES_14_1_2_();
 
     try {
       if (typeof GFP_APLICAR_CHECKBOX_APROVACAO_GEMINI_14_2_1 === "function") {

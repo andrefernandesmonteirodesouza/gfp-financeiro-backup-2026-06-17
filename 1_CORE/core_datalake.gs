@@ -15,6 +15,13 @@
  * > IMPLEMENTAÇÃO GORDELÍCIA: Agora, no mesmo momento que define a cor amarela
  * para sugestões, o script cria a validação de dados (Checkbox) na coluna STATUS.
  * > RESULTADO: A linha já nasce com o quadrado pronto para validar.
+ * - 16.1.18.2 (André + Claude, 2026-06-18): GFP_DATALAKE_VERIFY_INSERT_BLOCK_16_1_18_
+ *   reforçada. Antes só comparava "escrito" vs "esperado" — se o ID/HASH já vinham
+ *   vazios do passo anterior (normalize/id/sha256), a comparação "" === "" passava
+ *   como ok. Agora toda linha com DATA+DESCRICAO exige ID_TRANSACAO e HASH_LINHA
+ *   não vazios, incondicionalmente. Linha incompleta agora derruba ok=false →
+ *   o bloco é revertido (rollback já existente em GFP_DATALAKE_APPEND) e o erro
+ *   aparece no SYS_LOGS na hora, em vez de ficar uma linha capenga sem rastro.
  * -----------------------------------------------------------------------------
  */
 
@@ -4972,12 +4979,31 @@ function GFP_APLICAR_MIGRACAO_CATEGORIAS_LEGADAS_16_1_13() {
  */
 
 
+/**
+ * 🛡️ CORREÇÃO 16.1.18.2 (André + Claude, 2026-06-18)
+ *
+ * GAP ENCONTRADO: esta verificação comparava "o que foi escrito" com "o que
+ * deveria ter sido escrito" (expectedRows). Se o ID/HASH já vinha vazio em
+ * expectedRows — ou seja, se a etapa anterior (normalize/id/sha256) falhou
+ * em gerar o ID/HASH daquela linha por algum motivo — expectedId/expectedHash
+ * eram "" e actualId/actualHash também eram "", então "" !== "" é falso e
+ * NENHUM mismatch era reportado. A linha passava como "ok" mesmo incompleta.
+ * Foi assim que 2 linhas (DATA/DESCRICAO/VALOR preenchidos, ID/HASH vazios)
+ * escaparam dessa verificação em uma importação real.
+ *
+ * REFORÇO: agora, além de comparar expected x actual, cada linha com conteúdo
+ * básico (DATA/DESCRICAO/VALOR) é exigida a ter ID_TRANSACAO e HASH_LINHA
+ * não vazios, independente do que expectedRows continha. Linha que falhar
+ * nisso entra em incompleteRows e derruba ok=false, para o problema aparecer
+ * no SYS_LOGS na hora da importação, e não só numa auditoria manual depois.
+ */
 function GFP_DATALAKE_VERIFY_INSERT_BLOCK_16_1_18_(sheet, startRow, expectedRows) {
   const numRows = expectedRows.length;
   const actual = sheet.getRange(startRow, 1, numRows, 14).getValues();
 
   const missing = [];
   const mismatches = [];
+  const incompleteRows = [];
 
   for (let i = 0; i < expectedRows.length; i++) {
     const expectedId = String(expectedRows[i][10] || "").trim();
@@ -5007,13 +5033,28 @@ function GFP_DATALAKE_VERIFY_INSERT_BLOCK_16_1_18_(sheet, startRow, expectedRows
         actualHash: actualHash
       });
     }
+
+    // Reforço 16.1.18.2: linha com conteúdo básico mas sem ID e/ou HASH.
+    const hasCoreContent =
+      actual[i][0] !== "" && actual[i][0] !== null && actual[i][0] !== undefined && // DATA
+      String(actual[i][1] || "").trim() !== ""; // DESCRICAO
+
+    if (hasCoreContent && (!actualId || !actualHash)) {
+      incompleteRows.push({
+        row: startRow + i,
+        descricao: String(actual[i][1] || "").trim(),
+        idVazio: !actualId,
+        hashVazio: !actualHash
+      });
+    }
   }
 
   return {
-    ok: missing.length === 0 && mismatches.length === 0,
+    ok: missing.length === 0 && mismatches.length === 0 && incompleteRows.length === 0,
     checked: numRows,
     missing: missing,
-    mismatches: mismatches
+    mismatches: mismatches,
+    incompleteRows: incompleteRows
   };
 }
 
