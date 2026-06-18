@@ -25,6 +25,8 @@
  * -----------------------------------------------------------------------------
  */
 
+let GFP_DATALAKE_CATEGORIAS_OFICIAIS_CACHE_16_1_18_5_ = null;
+
 function coreDatalakePersistence(payload) {
   const functionName = "coreDatalakePersistence";
   const txPatch = "16.1.18";
@@ -103,6 +105,16 @@ function coreDatalakePersistence(payload) {
 
     const noteToSave = item.userNote || "";
     const statusToSave = "";
+    const originalCategory = String(item.category || "").trim();
+    const categoryToSave = GFP_DATALAKE_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(originalCategory);
+
+    if (originalCategory && !categoryToSave) {
+      if (!item.meta) item.meta = {};
+      item.meta.categoryRejectedBeforePersistence = originalCategory;
+      Logger.warn("[GFP 16.1.18.5] Categoria removida antes da gravação por não existir na CFG_Categorias: " + originalCategory);
+    }
+
+    item.category = categoryToSave;
 
     newRows.push([
       dateObj,
@@ -110,7 +122,7 @@ function coreDatalakePersistence(payload) {
       finalValue,
       item.type,
       item.account,
-      item.category,
+      categoryToSave,
       showCurrent,
       showTotal,
       statusToSave,
@@ -123,7 +135,7 @@ function coreDatalakePersistence(payload) {
 
     const rowColor = new Array(14).fill("#ffffff");
 
-    if (item.category && item.category !== "") {
+    if (categoryToSave && categoryToSave !== "") {
       rowColor[5] = "#fff9c4";
       statusValidations.push([checkboxRule]);
     } else {
@@ -4920,6 +4932,55 @@ function GFP_SORT_DB_TRANSACOES_DEFENSIVO_16_1_13() {
 }
 
 
+
+
+/**
+ * 🛡️ GFP 16.1.18.5 — Última barreira antes de gravar DB_TRANSACOES.
+ *
+ * Não classifica, não muda status, não tenta decidir categoria.
+ * Apenas normaliza categorias legadas conhecidas e só deixa passar se existir
+ * exatamente em CFG_Categorias!F:F. Se não existir, retorna vazio.
+ */
+function GFP_DATALAKE_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(categoria) {
+  let cat = String(categoria == null ? "" : categoria).trim();
+  if (!cat) return "";
+
+  try {
+    if (typeof GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_ === "function") {
+      cat = String(GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_(cat) || "").trim();
+    }
+  } catch (eNorm) {
+    Logger.log("[GFP 16.1.18.5] Falha ao normalizar categoria antes da persistência: " + eNorm.message);
+  }
+
+  if (!cat) return "";
+
+  const oficiais = GFP_DATALAKE_CATEGORIAS_OFICIAIS_SET_16_1_18_5_();
+  return oficiais[cat] ? cat : "";
+}
+
+function GFP_DATALAKE_CATEGORIAS_OFICIAIS_SET_16_1_18_5_() {
+  if (GFP_DATALAKE_CATEGORIAS_OFICIAIS_CACHE_16_1_18_5_) {
+    return GFP_DATALAKE_CATEGORIAS_OFICIAIS_CACHE_16_1_18_5_;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("CFG_Categorias");
+  const set = {};
+
+  if (!sh || sh.getLastRow() < 2) {
+    GFP_DATALAKE_CATEGORIAS_OFICIAIS_CACHE_16_1_18_5_ = set;
+    return set;
+  }
+
+  sh.getRange(2, 6, sh.getLastRow() - 1, 1).getValues().forEach(function(row) {
+    const cat = String(row[0] || "").trim();
+    if (cat) set[cat] = true;
+  });
+
+  GFP_DATALAKE_CATEGORIAS_OFICIAIS_CACHE_16_1_18_5_ = set;
+  return set;
+}
 
 function GFP_CATEGORIA_VALIDATION_RULE_16_1_13_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

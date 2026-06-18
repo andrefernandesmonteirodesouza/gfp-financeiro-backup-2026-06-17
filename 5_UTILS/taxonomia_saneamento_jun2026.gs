@@ -119,15 +119,9 @@ function GFP_TAXONOMIA_SANEAR_JUN2026_(options) {
 
     const shTax = GFP_getOrCreateSheet_("CFG_Taxonomia", ["TERMO_CHAVE", "CATEGORIA"]);
     const shApr = GFP_getOrCreateSheet_("CFG_Aprendizado", ["DATA_TREINO", "TERMO_CHAVE", "CATEGORIA_APRENDIDA", "ORIGEM"]);
-    const shQuar = GFP_getOrCreateSheet_("CFG_Taxonomia_Quarentena", [
-      "DATA",
-      "ORIGEM_ABA",
-      "LINHA_ORIGINAL",
-      "TERMO_CHAVE",
-      "CATEGORIA",
-      "MOTIVO",
-      "PATCH"
-    ]);
+    // GFP 16.1.18.5: não criar aba CFG_Taxonomia_Quarentena na versão final.
+    // As regras perigosas continuam registradas no objeto report e serão logadas em SYS_LOGS.
+    const shQuar = null;
 
     const planned = GFP_getPlannedTaxonomyRules_();
     report.plannedRules = planned.length;
@@ -999,15 +993,8 @@ function GFP_quarantineDangerousRules_(sheet, sheetName, keyCol, categoryCol, qu
       report.quarantined.push(item);
 
       if (!dryRun) {
-        quarantineSheet.appendRow([
-          new Date(),
-          sheetName,
-          i + 1,
-          key,
-          category,
-          item.reason,
-          GFP_TAX_PATCH_VERSION_
-        ]);
+        // GFP 16.1.18.5: não gravar quarentena em aba auxiliar.
+        // O detalhe fica em report.quarantined e no log consolidado.
         rowsToDelete.push(i + 1);
       }
     }
@@ -1091,22 +1078,29 @@ function GFP_readTwoColumnMap_(sheet, keyCol, valCol) {
 }
 
 function GFP_writeTaxonomyReport_(report) {
+  // GFP 16.1.18.5: não criar SYS_TAXONOMIA_REPORT na versão final.
+  // O relatório passa a ser registrado em SYS_LOGS, quando existir.
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = GFP_getOrCreateSheet_("SYS_TAXONOMIA_REPORT", [
-    "DATA",
-    "PATCH",
-    "DRY_RUN",
-    "TIPO",
-    "JSON"
-  ]);
+  const sh = ss.getSheetByName("SYS_LOGS");
 
-  sh.appendRow([
-    new Date(),
-    report.version || GFP_TAX_PATCH_VERSION_,
-    !!report.dryRun,
-    report.version || "",
-    JSON.stringify(report)
-  ]);
+  if (!sh) return;
+
+  sh.insertRowBefore(2);
+  sh.getRange(2, 1, 1, 5).setValues([[
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss"),
+    "INFO",
+    "Taxonomia",
+    "Relatório de saneamento de taxonomia registrado sem criar abas auxiliares.",
+    JSON.stringify({
+      version: report.version || GFP_TAX_PATCH_VERSION_,
+      dryRun: !!report.dryRun,
+      plannedRules: report.plannedRules || 0,
+      rulesResolved: report.rulesResolved || 0,
+      skipped: report.rulesSkippedNoOfficialCategory ? report.rulesSkippedNoOfficialCategory.length : 0,
+      quarantined: report.quarantined ? report.quarantined.length : 0,
+      errors: report.errors || []
+    })
+  ]]);
 }
 
 function GFP_norm_(value) {

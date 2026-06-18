@@ -17,6 +17,7 @@ const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty("GEMI
 let GLOBAL_MEMORY_CACHE = null;
 let GLOBAL_TAXONOMY_CACHE = null;
 let GLOBAL_CATEGORIES_CACHE = null;
+let GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE = null;
 
 // =================================================================
 // 🔌 SEÇÃO 1: CONECTOR DO PIPELINE DE DADOS (AUTOMÁTICO)
@@ -38,7 +39,7 @@ function runClassificationPipeline(payload) {
     if (!item) return;
     if (item.category && item.category !== "") return;
 
-    const cat = classifyTransaction(item.description, item.amount);
+    const cat = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(classifyTransaction(item.description, item.amount));
 
     if (cat) {
       item.category = cat;
@@ -85,14 +86,20 @@ function classifyTransaction(description, value) {
   // B. MEMÓRIA VIVA (CFG_Aprendizado)
   if (GLOBAL_MEMORY_CACHE) {
     for (let key in GLOBAL_MEMORY_CACHE) {
-      if (descClean.includes(key)) return GLOBAL_MEMORY_CACHE[key];
+      if (descClean.includes(key)) {
+        const catMem = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(GLOBAL_MEMORY_CACHE[key]);
+        if (catMem) return catMem;
+      }
     }
   }
   
   // C. TAXONOMIA (CFG_Taxonomia)
   if (GLOBAL_TAXONOMY_CACHE) {
     for (let key in GLOBAL_TAXONOMY_CACHE) {
-      if (descClean.includes(key)) return GLOBAL_TAXONOMY_CACHE[key];
+      if (descClean.includes(key)) {
+        const catTax = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(GLOBAL_TAXONOMY_CACHE[key]);
+        if (catTax) return catTax;
+      }
     }
   }
 
@@ -136,9 +143,15 @@ function processBatchWithGemini(items) {
       
       if (Array.isArray(result) && result.length === chunk.length) {
         chunk.forEach((it, idx) => {
-          it.category = result[idx];
-          if (!it.meta) it.meta = {};
-          it.meta.classificationParams = { source: "GEMINI_BATCH", confidence: "MEDIUM" };
+          const catGemini = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(result[idx]);
+
+          if (catGemini) {
+            it.category = catGemini;
+            if (!it.meta) it.meta = {};
+            it.meta.classificationParams = { source: "GEMINI_BATCH", confidence: "MEDIUM" };
+          } else {
+            Logger.warn(`[AI AGENT] Categoria Gemini rejeitada por não existir na CFG_Categorias: ${result[idx]}`);
+          }
         });
         Logger.log(`[AI AGENT] Lote ${i} processado com sucesso.`);
       } else {
@@ -254,6 +267,57 @@ function callGeminiBrain(prompt) {
   }
 }
 
+
+/**
+ * 🛡️ GFP 16.1.18.5 — Guarda mínima de categoria oficial.
+ *
+ * Objetivo cirúrgico:
+ * - aceitar somente categorias existentes exatamente em CFG_Categorias!F:F;
+ * - reaproveitar o normalizador legado, quando existir;
+ * - rejeitar categoria inválida retornando string vazia, sem interromper a importação.
+ */
+function GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(categoria) {
+  let cat = String(categoria == null ? "" : categoria).trim();
+  if (!cat) return "";
+
+  try {
+    if (typeof GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_ === "function") {
+      cat = String(GFP_NORMALIZAR_CATEGORIA_STRING_16_1_13_(cat) || "").trim();
+    }
+  } catch (eNorm) {
+    Logger.warn("[GFP 16.1.18.5] Falha ao normalizar categoria: " + eNorm.message);
+  }
+
+  if (!cat) return "";
+
+  const oficiais = GFP_INTEL_CATEGORIAS_OFICIAIS_SET_16_1_18_5_();
+  if (oficiais[cat]) return cat;
+
+  Logger.warn("[GFP 16.1.18.5] Categoria rejeitada por não existir na CFG_Categorias: " + cat);
+  return "";
+}
+
+function GFP_INTEL_CATEGORIAS_OFICIAIS_SET_16_1_18_5_() {
+  if (GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE) return GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("CFG_Categorias");
+  const set = {};
+
+  if (!sh || sh.getLastRow() < 2) {
+    GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE = set;
+    return set;
+  }
+
+  sh.getRange(2, 6, sh.getLastRow() - 1, 1).getValues().forEach(function(row) {
+    const cat = String(row[0] || "").trim();
+    if (cat) set[cat] = true;
+  });
+
+  GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE = set;
+  return set;
+}
+
 function loadCategoryTree() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("CFG_Categorias");
@@ -284,7 +348,8 @@ function loadSheetToMap(sheetName, keyColIdx, valColIdx) {
         .replace(/\*/g, " ")
         .trim();
 
-      if (cleanKey) map[cleanKey] = val;
+      const officialVal = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(val);
+      if (cleanKey && officialVal) map[cleanKey] = officialVal;
     }
   }
 
@@ -294,6 +359,12 @@ function loadSheetToMap(sheetName, keyColIdx, valColIdx) {
 
 
 function trainMemory(termoChave, categoriaCorreta, origin = "SISTEMA") {
+  categoriaCorreta = GFP_INTEL_NORMALIZAR_CATEGORIA_OFICIAL_16_1_18_5_(categoriaCorreta);
+  if (!categoriaCorreta) {
+    Logger.warn("[GFP 16.1.18.5] Aprendizado ignorado: categoria inválida ou inexistente na CFG_Categorias.");
+    return false;
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName("CFG_Aprendizado");
 
@@ -360,6 +431,7 @@ function forceIntelligenceRescan() {
   // 1. FORÇA RECARGA DA MEMÓRIA
   GLOBAL_MEMORY_CACHE = null; 
   GLOBAL_TAXONOMY_CACHE = null;
+  GLOBAL_CATEGORIES_OFFICIAL_SET_CACHE = null;
   // Recarrega agora com os dados novos da CFG_Aprendizado
   GLOBAL_MEMORY_CACHE = loadSheetToMap("CFG_Aprendizado", 1, 2);
   GLOBAL_TAXONOMY_CACHE = loadSheetToMap("CFG_Taxonomia", 0, 1);
